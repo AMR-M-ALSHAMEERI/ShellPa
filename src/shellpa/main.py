@@ -3,7 +3,10 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
 
+from .config import load_config
 from .os_detect import detect_environment
+from .llm import generate_command
+from .executor import execute_command
 
 app = typer.Typer(
     name="shellpa",
@@ -21,48 +24,49 @@ def do(
     """
     Translate English into a shell command and execute it.
     """
+    # Load env variables (API Keys)
+    load_config()
+
     # 1. Detect environment
     env_info = detect_environment()
     
-    # Placeholder: Call LLM module here later
-    # For boilerplate, we'll mock the response
-    mock_command = "Write-Output 'Hello from ShellPa'" if env_info["shell"] == "powershell" else "echo 'Hello from ShellPa'"
-    explanation = "This command prints a greeting to the terminal."
+    # 2. Call LLM to generate the command
+    with console.status("[bold cyan]Generating command...[/bold cyan]", spinner="dots"):
+        try:
+            response = generate_command(query, env_info)
+        except Exception as e:
+            console.print(f"[bold red]Failed to generate command:[/] {e}")
+            raise typer.Exit(code=1)
+
+    proposed_command = response.command
+    explanation = response.explanation
     
     lexer_name = "powershell" if env_info["shell"] in ["powershell", "cmd"] else "bash"
     
     console.print(f"[bold cyan]Task:[/bold cyan] {query}")
     console.print(f"[bold magenta]Detected Environment:[/bold magenta] {env_info['os']} ({env_info['shell']})\n")
     
-    # 2. Display the command using Rich Syntax Highlighting
-    syntax = Syntax(mock_command, lexer_name, theme="monokai", line_numbers=False)
+    # 3. Display the command using Rich Syntax Highlighting
+    syntax = Syntax(proposed_command, lexer_name, theme="monokai", line_numbers=False)
     panel = Panel(syntax, title="Proposed Command", border_style="green")
     console.print(panel)
     console.print(f"[bold blue]Explanation:[/bold blue] {explanation}\n")
     
-    # 3. Handle execution modes
+    # 4. Handle execution modes
     if dry_run:
         console.print("[yellow]Dry-run mode active. Exiting without execution.[/yellow]")
         raise typer.Exit()
         
     if force:
         console.print("[bold red]WARNING: --force flag used. Executing immediately.[/bold red]")
-        execute_command(mock_command, env_info)
+        execute_command(proposed_command, env_info)
     else:
         # Confirmation Step
         confirm = typer.confirm("Do you want to execute this command?", default=False)
         if confirm:
-            execute_command(mock_command, env_info)
+            execute_command(proposed_command, env_info)
         else:
             console.print("[yellow]Execution cancelled by user.[/yellow]")
-
-def execute_command(command: str, env_info: dict):
-    """
-    Placeholder for actual subprocess execution logic.
-    """
-    console.print("[bold green]Executing...[/bold green]")
-    # TODO: Implement subprocess.run in executor.py
-    console.print(f"Mock executed: {command}")
 
 if __name__ == "__main__":
     app()
