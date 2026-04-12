@@ -15,7 +15,7 @@ from typing import Optional
 from . import __version__
 from .config import load_config
 from .os_detect import detect_environment
-from .llm import generate_command
+from .llm import generate_command, generate_recovery_command
 from .executor import execute_command
 from .setup import run_setup_wizard, ocean_theme
 
@@ -136,45 +136,88 @@ def play_startup_animation():
         live.update(styled_text)
 
 def process_query(query: str, env_info: dict, force: bool, dry_run: bool):
-    """Processes a single intent-to-command operation natively."""
-    with console.status("[bold cyan]Generating command...[/bold cyan]", spinner="dots"):
-        try:
-            response = generate_command(query, env_info)
-        except Exception as e:
-            console.print(f"[bold red]Failed to generate command:[/] {e}")
-            raise typer.Exit(code=1)
+    """Processes a single intent-to-command operation natively with Auto-Recovery."""
+    
+    is_recovery = False
+    failed_cmd = ""
+    error_msg = ""
+    max_attempts = 4  # Initial try + 3 retries
+    
+    for attempt in range(max_attempts):
+        with console.status("[bold cyan]Generating command...[/bold cyan]", spinner="dots"):
+            try:
+                if is_recovery:
+                    response = generate_recovery_command(query, failed_cmd, error_msg, env_info)
+                else:
+                    response = generate_command(query, env_info)
+            except Exception as e:
+                console.print(f"[bold red]Failed to generate command:[/] {e}")
+                raise typer.Exit(code=1)
 
-    proposed_command = response.command
-    explanation = response.explanation
-    
-    lexer_name = "powershell" if env_info["shell"] in ["powershell", "cmd"] else "bash"
-    
-    # console.print(f"[bold cyan]Task:[/bold cyan] {query}")
-    # We omit printing the task label redundantly if they just typed it in REPL, 
-    # but keep OS metadata and explanation logic intact.
-    console.print(f"[bold magenta]Detected Environment:[/bold magenta] {env_info['os']} ({env_info['shell']})\n")
-    
-    # Display the command using Rich Syntax Highlighting
-    syntax = Syntax(proposed_command, lexer_name, theme="monokai", line_numbers=False)
-    panel = Panel(syntax, title="Proposed Command", border_style="green")
-    console.print(panel)
-    console.print(f"[bold blue]Explanation:[/bold blue] {explanation}\n")
-    
-    # Handle execution modes
-    if dry_run:
-        console.print("[yellow]Dry-run mode active. Exiting without execution.[/yellow]")
-        return
+        proposed_command = response.command
+        explanation = response.explanation
         
-    if force:
-        console.print("[bold red]WARNING: --force flag used. Executing immediately.[/bold red]")
-        execute_command(proposed_command, env_info)
-    else:
-        # Confirmation Step
-        confirm = typer.confirm("Do you want to execute this command?", default=False)
-        if confirm:
-            execute_command(proposed_command, env_info)
+        lexer_name = "powershell" if env_info["shell"] in ["powershell", "cmd"] else "bash"
+        
+        if not is_recovery:
+            console.print(f"[bold magenta]Detected Environment:[/bold magenta] {env_info['os']} ({env_info['shell']})\n")
+        else:
+            console.print(f"\n[bold magenta]>>> Auto-Recovery Attempt {attempt}/{max_attempts - 1} <<<[/bold magenta]\n")
+        
+        # Display the command using Rich Syntax Highlighting
+        syntax = Syntax(proposed_command, lexer_name, theme="monokai", line_numbers=False)
+        panel = Panel(syntax, title="Proposed Command", border_style="green")
+        console.print(panel)
+        console.print(f"[bold blue]Explanation:[/bold blue] {explanation}\n")
+        
+        # Handle execution modes
+        if dry_run:
+            console.print("[yellow]Dry-run mode active. Exiting without execution.[/yellow]")
+            return
+            
+        execute = force
+        if force:
+            console.print("[bold red]WARNING: --force flag used. Executing immediately.[/bold red]")
+        else:
+            # Confirmation Step
+            execute = questionary.confirm(
+                "Do you want to execute this command?",
+                qmark="ShellPa ",
+                style=ocean_theme,
+                default=False
+            ).ask()
+            
+        if execute:
+            success, output_err = execute_command(proposed_command, env_info)
+            
+            if success:
+                console.print("[bold green]✓ Command succeeded![/bold green]")
+                return
+            else:
+                console.print(f"\n[bold red][!] COMMAND FAILED:[/bold red] {output_err}\n")
+                
+                if attempt < max_attempts - 1:
+                    recover = questionary.confirm(
+                        "Would you like me to try and fix this automatically?",
+                        qmark="ShellPa ",
+                        style=ocean_theme,
+                        default=True
+                    ).ask()
+                    
+                    if recover:
+                        is_recovery = True
+                        failed_cmd = proposed_command
+                        error_msg = output_err
+                        continue
+                    else:
+                        console.print("[yellow]Auto-recovery aborted by user.[/yellow]")
+                        return
+                else:
+                    console.print("[bold red]Max recovery attempts reached. Returning to terminal.[/bold red]")
+                    return
         else:
             console.print("[yellow]Execution cancelled by user.[/yellow]")
+            return
 
 @app.callback(invoke_without_command=True)
 def main(

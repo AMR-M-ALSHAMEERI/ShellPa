@@ -45,3 +45,45 @@ Do not include any formatting like markdown blocks. Escape JSON properties prope
     content = content.strip()
     
     return CommandResponse.model_validate_json(content)
+
+def generate_recovery_command(query: str, failed_command: str, error_message: str, env_info: dict) -> CommandResponse:
+    """Uses the LLM to generate a corrected shell command when a previous one failed."""
+    system_prompt = f"""
+You are a CLI agent. The user requested a task, but the previous command you generated failed.
+Target Operating System: {env_info['os']}
+Target Shell: {env_info['shell']}
+
+Your task is to analyze the error and provide the corrected command.
+
+Respond ONLY with a valid JSON object matching this exact schema:
+{{
+    "command": "<the exact shell command>",
+    "explanation": "<a brief explanation of what you fixed and why>"
+}}
+Do not include any formatting like markdown blocks. Escape JSON properties properly.
+"""
+    user_prompt = f"Original Query: {query}\nFailed Command: {failed_command}\nError Message: {error_message}\n\nPlease provide a corrected command that will succeed."
+    
+    model = os.getenv("SHELLPA_MODEL", "openrouter/openai/gpt-3.5-turbo")
+    
+    response = completion(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        response_format={"type": "json_object"}
+    )
+    
+    content = response.choices[0].message.content.strip()
+    
+    if content.startswith("```json"):
+        content = content[7:]
+    elif content.startswith("```"):
+        content = content[3:]
+    if content.endswith("```"):
+        content = content[:-3]
+        
+    content = content.strip()
+    
+    return CommandResponse.model_validate_json(content)
