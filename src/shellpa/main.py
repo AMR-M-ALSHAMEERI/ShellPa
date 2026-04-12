@@ -2,6 +2,12 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
+from rich.text import Text
+from rich.live import Live
+import pyfiglet
+import time
+import random
+from datetime import datetime
 from typing import Optional
 
 from . import __version__
@@ -17,18 +23,113 @@ app = typer.Typer(
 )
 console = Console()
 
-def print_banner():
-    # Large ASCII banner natively supporting uppercase SHELLPA
-    logo = r"""
-  ____  _          _ _  ____       
- / ___|| |__   ___| | ||  _ \ __ _ 
- \___ \| '_ \ / _ \ | || |_) / _` |
-  ___) | | | |  __/ | ||  __/ (_| |
- |____/|_| |_|\___|_|_||_|   \__,_|
-    """
-    console.print(f"[bold cyan]{logo}[/bold cyan]")
-    console.print(f"  [bold white]Version:[/bold white] [green]{__version__}[/green]")
-    console.print("  [bold magenta]Developed by AMR & KHADIGA[/bold magenta]\n")
+def play_startup_animation():
+    # Generate an ASCII art banner for "SHELLPA"
+    banner_text = pyfiglet.figlet_format("SHELLPA", font="slant")
+    # Append the version to the end of the ASCII art exactly, pulling it together
+    banner_text = f"{banner_text.rstrip()}  v{__version__}\n"
+    
+    # helper for appending authors right under the logo
+    def append_authors(text_obj):
+        text_obj.append(f"  Developed by ", style="bold #00ccff")
+        text_obj.append("AMR", style="bold #000066") # Dark blue
+        text_obj.append(" & ", style="bold #00ccff")
+        text_obj.append("KHADIGA\n\n", style="bold #4b0082") # Dark purple
+    
+    # Time-based Greeting
+    hour = datetime.now().hour
+    if hour < 12:
+        greeting = "Good morning!"
+    elif hour < 17:
+        greeting = "Good afternoon!"
+    else:
+        greeting = "Good evening!"
+
+    # Dynamic Subtitles Pool
+    subtitles = [
+        "Your AI CLI Assistant.",
+        "Navigating the terminal so you don't have to.",
+        "Translating thoughts into commands.",
+        "Command line magic, automated.",
+        "From English to Binary in seconds."
+    ]
+    
+    # Follow-up questions
+    questions = [
+        "How can I help you today?",
+        "What is on your mind?",
+        "What shall we execute?",
+        "Ready for your next command.",
+        "What are we building today?",
+        "How can I assist your workflow?"
+    ]
+    
+    # Pick random components and combine them
+    selected_subtitle = f"{greeting} {random.choice(subtitles)} {random.choice(questions)}"
+
+    # Ocean/Blue theme colors (Blues + Dark Green)
+    aurora_colors = [
+        "#001133", # Deep dark blue
+        "#002244", # Dark navy
+        "#003366", # Navy
+        "#004d00", # Dark Green (as requested)
+        "#0055ff", # Royal blue
+        "#0088ff", # Bright blue
+        "#00ccff"  # Light cyan/blue
+    ]
+    
+    # "Breathing Light Blue" theme colors (Settling phase)
+    breathing_blues = [
+        "#0033cc", "#0055ff", "#0077ff", "#0099ff", 
+        "#00bbff", "#00ddff", "#00ffff", "#e6ffff"
+    ]
+    
+    console.print()  # Visual padding
+    
+    with Live(refresh_per_second=24, transient=False) as live:
+        # Step 1: Rapid Aurora Cycle (Extended length: loops 3 times, slightly slower)
+        cycling_aurora = aurora_colors + aurora_colors[::-1]
+        for _ in range(3):
+            for color in cycling_aurora:
+                styled_text = Text(banner_text, style=color)
+                append_authors(styled_text)
+                # We keep the subtitles hidden during the flash
+                live.update(styled_text)
+                time.sleep(0.07) # Longer delay
+
+        # Step 2: Subtitle Reveal (Typewriter Effect with animated CLI cursor block)
+        typed_subtitle = ""
+        for char in selected_subtitle:
+            typed_subtitle += char
+            styled_text = Text(banner_text, style="#0055ff") # Darker blue base
+            append_authors(styled_text)
+            styled_text.append(f"  {typed_subtitle}", style="italic #00ffff")
+            styled_text.append("█", style="blink #00ffff") # CLI cursor block
+            live.update(styled_text)
+            time.sleep(0.06) # Slower so it lasts
+        
+        # Step 3: Breathing Light Blue Phase (Extended length: breathes 4 times)
+        cycling_blues = breathing_blues + breathing_blues[::-1]
+        step = 0
+        for _ in range(4):  # Breathe in and out 4 times
+            for color in cycling_blues:
+                # Animate a flickering terminal underscore/block at the end instead of an emoji
+                cursor = "█" if (step % 4 < 2) else "_"
+                step += 1
+                
+                styled_text = Text(banner_text, style=color)
+                append_authors(styled_text)
+                styled_text.append(f"  {selected_subtitle} ", style=f"italic {color}")
+                styled_text.append(cursor, style=f"bold {color}")
+                live.update(styled_text)
+                time.sleep(0.06) # Slower breathing, lasts longer
+        
+        # Final Setting State: Bright Icy Blue with a terminal underscore
+        final_color = "#00eeff"
+        styled_text = Text(banner_text, style=final_color)
+        append_authors(styled_text)
+        styled_text.append(f"  {selected_subtitle} _", style=f"italic {final_color}")
+        live.update(styled_text)
 
 def process_query(query: str, env_info: dict, force: bool, dry_run: bool):
     """Processes a single intent-to-command operation natively."""
@@ -90,7 +191,7 @@ def do(
         return
 
     # REPL Continuous Mode
-    print_banner()
+    play_startup_animation()
     console.print("[dim]Type 'exit' or 'quit' to close the interactive session.[/dim]\n")
     
     while True:
