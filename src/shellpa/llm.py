@@ -20,7 +20,8 @@ Respond ONLY with a valid JSON object matching this exact schema:
 }}
 Do not include any formatting like markdown blocks. Escape JSON properties properly.
 """
-    model = os.getenv("SHELLPA_DEFAULT_MODEL", "gemini/gemini-1.5-pro")
+    # Grab user-configured model from setup wizard, default to OpenRouter 3.5 turbo
+    model = os.getenv("SHELLPA_MODEL", "openrouter/openai/gpt-3.5-turbo")
     
     response = completion(
         model=model,

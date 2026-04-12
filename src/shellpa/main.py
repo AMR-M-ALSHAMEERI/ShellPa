@@ -15,6 +15,7 @@ from .config import load_config
 from .os_detect import detect_environment
 from .llm import generate_command
 from .executor import execute_command
+from .setup import run_setup_wizard
 
 app = typer.Typer(
     name="shellpa",
@@ -171,6 +172,14 @@ def process_query(query: str, env_info: dict, force: bool, dry_run: bool):
             execute_command(proposed_command, env_info)
         else:
             console.print("[yellow]Execution cancelled by user.[/yellow]")
+
+@app.command()
+def config():
+    """Launch the interactive setup wizard to change your API Key or Model."""
+    success = run_setup_wizard()
+    if success:
+        # Start the agent interactively immediately after configuration
+        do(query=None, force=False, dry_run=False)
 
 @app.command()
 def do(

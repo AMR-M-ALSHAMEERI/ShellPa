@@ -39,11 +39,9 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-### 4. Configure API Keys (Critical)
-ShellPa uses LiteLLM, allowing it to route through OpenRouter or OpenAI. 
-1. Copy the template: `cp .env.example .env`
-2. Open `.env` and paste your API key (e.g., `OPENROUTER_API_KEY=sk-or-v1-...`).
-3. Ensure the model prefix matches the key used (e.g., `openrouter/openai/gpt-3.5-turbo` or `openai/gpt-4o`).
+### 4. Configure API Keys
+ShellPa includes an interactive, arrow-key onboarding wizard to securely set up your API keys and preferred AI model. 
+Simply run the CLI for the first time, and it will guide you through choosing OpenRouter, OpenAI, Google Gemini, or Anthropic!
 
 ## 🚀 Usage
 
@@ -52,7 +50,14 @@ Once installed, simply run the command from any directory:
 shellpa "Find all python files in this project"
 ```
 
+If you don't provide a prompt, it drops you into our beautiful interactive REPL mode!
+```bash
+shellpa
+```
+
 ### Extra Commands:
+- Change your Model or Provider later:
+  `shellpa config`
 - Try a dry-run to see the formatting without executing:
   `shellpa "list my desktop files" --dry-run`
 - Force execution without approval:
