@@ -7,6 +7,8 @@ from rich.live import Live
 import pyfiglet
 import time
 import random
+import webbrowser
+import questionary
 from datetime import datetime
 from typing import Optional
 
@@ -15,7 +17,7 @@ from .config import load_config
 from .os_detect import detect_environment
 from .llm import generate_command
 from .executor import execute_command
-from .setup import run_setup_wizard
+from .setup import run_setup_wizard, ocean_theme
 
 app = typer.Typer(
     name="shellpa",
@@ -177,7 +179,7 @@ def process_query(query: str, env_info: dict, force: bool, dry_run: bool):
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
-    query: Optional[str] = typer.Argument(None, help="The natural language task you want to perform, OR 'config' to run the setup manually."),
+    query: Optional[str] = typer.Argument(None, help="The natural language task you want to perform, OR 'config' / 'about'."),
     force: bool = typer.Option(False, "--force", "-f", help="Execute without asking for confirmation."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print the generated command without executing it.")
 ):
@@ -191,6 +193,39 @@ def main(
             query = None
         else:
             raise typer.Exit()
+            
+    if query == "about":
+        console.print()
+        banner_text = pyfiglet.figlet_format("SHELLPA", font="slant")
+        
+        # Display an elegant About Box
+        about_text = (
+            f"[bold #00ccff]ShellPa v{__version__}[/bold #00ccff]\n\n"
+            "A modern, cross-platform AI CLI Agent translating English into native shell commands. \n"
+            "Built to make the terminal effortless."
+        )
+        panel = Panel(about_text, title="[bold white]About[/bold white]", border_style="#0055ff", expand=False)
+        
+        console.print(f"[bold #00ccff]{banner_text}[/bold #00ccff]")
+        console.print(panel)
+        console.print()
+        
+        choice = questionary.select(
+            "Visit our GitHub profiles:",
+            choices=[
+                questionary.Choice("</> AMR (AMR-M-ALSHAMEERI)", value="https://github.com/AMR-M-ALSHAMEERI"),
+                questionary.Choice("</> KHADIGA (doji0x0)", value="https://github.com/doji0x0"),
+                questionary.Choice("Return to Terminal", value="exit")
+            ],
+            style=ocean_theme
+        ).ask()
+        
+        if choice and choice != "exit":
+            console.print(f"\n[bold cyan]Opening browser...[/bold cyan] [dim]{choice}[/dim]")
+            time.sleep(0.5)
+            webbrowser.open(choice)
+            
+        raise typer.Exit()
             
     load_config()
     env_info = detect_environment()
