@@ -5,7 +5,7 @@ ShellPa automatically detects if you are using Windows (cmd/PowerShell) or macOS
 
 ## Setup (Mac / Linux / Windows)
 
-Welcome to the project! Follow these exact steps to clone the repo, install the dependencies, and get the agent running on your local machine.
+Welcome to ShellPa project! Follow these exact steps to clone the repo, install the dependencies, and get the agent running on your local machine.
 
 ### 1. Clone & Setup Virtual Environment
 ```bash
