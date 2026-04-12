@@ -20,7 +20,8 @@ from .setup import run_setup_wizard
 app = typer.Typer(
     name="shellpa",
     help="ShellPa: A cross-platform CLI Agent for natural language system execution.",
-    add_completion=False
+    add_completion=False,
+    invoke_without_command=True
 )
 console = Console()
 
@@ -173,17 +174,10 @@ def process_query(query: str, env_info: dict, force: bool, dry_run: bool):
         else:
             console.print("[yellow]Execution cancelled by user.[/yellow]")
 
-@app.command()
-def config():
-    """Launch the interactive setup wizard to change your API Key or Model."""
-    success = run_setup_wizard()
-    if success:
-        # Start the agent interactively immediately after configuration
-        do(query=None, force=False, dry_run=False)
-
-@app.command()
-def do(
-    query: Optional[str] = typer.Argument(None, help="The natural language task you want to perform."),
+@app.callback(invoke_without_command=True)
+def main(
+    ctx: typer.Context,
+    query: Optional[str] = typer.Argument(None, help="The natural language task you want to perform, OR 'config' to run the setup manually."),
     force: bool = typer.Option(False, "--force", "-f", help="Execute without asking for confirmation."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print the generated command without executing it.")
 ):
@@ -191,6 +185,13 @@ def do(
     Translate English into a shell command and execute it.
     If no query is provided, starts an interactive REPL session.
     """
+    if query == "config":
+        success = run_setup_wizard()
+        if success:
+            query = None
+        else:
+            raise typer.Exit()
+            
     load_config()
     env_info = detect_environment()
 
@@ -201,7 +202,7 @@ def do(
 
     # REPL Continuous Mode
     play_startup_animation()
-    console.print("[dim]Type 'exit' or 'quit' to close the interactive session.[/dim]\n")
+    console.print("\n[dim]Type 'exit' or 'quit' to close the interactive session.[/dim]\n")
     
     while True:
         try:
