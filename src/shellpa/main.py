@@ -215,17 +215,21 @@ def main(
             choices=[
                 questionary.Choice("</> AMR (AMR-M-ALSHAMEERI)", value="https://github.com/AMR-M-ALSHAMEERI"),
                 questionary.Choice("</> KHADIGA (doji0x0)", value="https://github.com/doji0x0"),
-                questionary.Choice("Return to Terminal", value="exit")
+                questionary.Choice("--> Launch ShellPa Interactive", value="launch"),
+                questionary.Choice("    Exit to Terminal", value="exit")
             ],
             style=ocean_theme
         ).ask()
         
-        if choice and choice != "exit":
+        if choice == "launch":
+            query = None  # clear the query so it falls through to the interactive REPL
+        elif choice and choice != "exit":
             console.print(f"\n[bold cyan]Opening browser...[/bold cyan] [dim]{choice}[/dim]")
             time.sleep(0.5)
             webbrowser.open(choice)
-            
-        raise typer.Exit()
+            raise typer.Exit()
+        else:
+            raise typer.Exit()
             
     load_config()
     env_info = detect_environment()
