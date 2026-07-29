@@ -220,11 +220,16 @@ def test_passthrough_inherits_terminal_and_honors_timeout(
     process = FakeProcess(returncode=None, wait_timeout=True)
     captured: dict = {}
 
+    def fake_kill_process_group(pid: int, _signal: int) -> None:
+        assert pid == process.pid
+        process.terminate()
+
     def fake_popen(command, **kwargs):
         captured.update(kwargs)
         return process
 
     monkeypatch.setattr(executor.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(executor.os, "killpg", fake_kill_process_group, raising=False)
     result = executor.execute_command(request(interactive=True, timeout_seconds=0.1))
 
     assert "stdout" not in captured
