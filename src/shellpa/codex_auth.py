@@ -66,8 +66,8 @@ def login_codex(
         console.print(f"[red]{error}[/red]")
         return False
     console.print(
-        "[green]ChatGPT is connected through Codex. "
-        "ShellPa did not receive or store your credentials.[/green]"
+        "[green]Your ChatGPT account is ready to use with ShellPa through Codex. "
+        "Your sign-in session is managed by Codex, not ShellPa.[/green]"
     )
     return True
 

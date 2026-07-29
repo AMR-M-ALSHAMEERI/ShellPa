@@ -58,13 +58,20 @@ def test_browser_login_opens_only_official_sdk_url(monkeypatch, tmp_path) -> Non
     opened: list[str] = []
     monkeypatch.setattr(codex_auth, "_load_sdk", lambda: fake_sdk(codex))
     monkeypatch.setattr(codex_auth, "_client_config", lambda sdk, cwd: {})
-    with (tmp_path / "output.txt").open("w", encoding="utf-8") as stream:
+    output_path = tmp_path / "output.txt"
+    with output_path.open("w", encoding="utf-8") as stream:
         assert codex_auth.login_codex(
             Console(file=stream),
             opener=opened.append,
         )
 
     assert opened == [login.auth_url]
+    rendered = output_path.read_text(encoding="utf-8")
+    normalized = " ".join(rendered.split())
+    assert (
+        "Your ChatGPT account is ready to use with ShellPa through Codex. "
+        "Your sign-in session is managed by Codex, not ShellPa."
+    ) in normalized
 
 
 def test_device_code_login_does_not_open_browser(monkeypatch, tmp_path) -> None:
