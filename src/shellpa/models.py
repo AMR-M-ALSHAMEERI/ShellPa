@@ -63,6 +63,25 @@ class ProjectType(str, Enum):
     GRADLE = "gradle"
 
 
+class GitHeadState(str, Enum):
+    """The safely observable state of a Git repository's HEAD."""
+
+    BRANCH = "branch"
+    DETACHED = "detached"
+    UNBORN = "unborn"
+    UNKNOWN = "unknown"
+
+
+class PythonEnvironmentKind(str, Enum):
+    """Recognized active Python environment mechanisms."""
+
+    VENV = "venv"
+    CONDA = "conda"
+    POETRY = "poetry"
+    PIPENV = "pipenv"
+    UNKNOWN = "unknown"
+
+
 class PermissionDecision(BaseModel):
     """A mode-aware authorization decision for one assessed command."""
 
@@ -145,6 +164,26 @@ class RecoveryContext(BaseModel):
     partial_effect_possible: bool = True
 
 
+class GitContext(BaseModel):
+    """Bounded Git metadata that excludes remotes, diffs, and filenames."""
+
+    is_repository: bool = False
+    branch: str | None = None
+    head_state: GitHeadState = GitHeadState.UNKNOWN
+    has_tracked_changes: bool = False
+    has_untracked_files: bool = False
+    tracked_change_count: int = Field(default=0, ge=0)
+    untracked_file_count: int = Field(default=0, ge=0)
+    status_truncated: bool = False
+
+
+class PythonEnvironmentContext(BaseModel):
+    """Non-secret facts about the active Python environment."""
+
+    active: bool = False
+    kind: PythonEnvironmentKind | None = None
+
+
 class WorkspaceContext(BaseModel):
     """Bounded, read-only metadata describing the active workspace."""
 
@@ -154,4 +193,8 @@ class WorkspaceContext(BaseModel):
     project_types: list[ProjectType] = Field(default_factory=list)
     markers: list[str] = Field(default_factory=list)
     available_tools: list[str] = Field(default_factory=list)
+    git: GitContext = Field(default_factory=GitContext)
+    python_environment: PythonEnvironmentContext = Field(
+        default_factory=PythonEnvironmentContext
+    )
     warnings: list[str] = Field(default_factory=list)
