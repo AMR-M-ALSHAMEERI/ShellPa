@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from rich.console import Console
 
 import shellpa.codex_auth as codex_auth
+from shellpa.codex_provider import CodexAccountState, CodexAccountStatus
 
 
 class FakeLogin:
@@ -119,3 +120,140 @@ def test_logout_is_delegated_to_codex(monkeypatch, tmp_path) -> None:
         assert codex_auth.logout_codex(Console(file=stream)) is True
 
     assert codex.logged_out is True
+
+
+def test_existing_login_defaults_to_keeping_current_session(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    output_path = tmp_path / "output.txt"
+    monkeypatch.setattr(codex_auth, "_interactive_terminal", lambda: True)
+    monkeypatch.setattr(codex_auth, "_select", lambda prompt, choices: "keep")
+    monkeypatch.setattr(
+        codex_auth,
+        "login_codex",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("existing session was replaced")
+        ),
+    )
+    status = CodexAccountStatus(CodexAccountState.CHATGPT, plan_type="plus")
+
+    with output_path.open("w", encoding="utf-8") as stream:
+        assert codex_auth.login_codex_interactively(
+            Console(file=stream),
+            account_status=status,
+        )
+
+    rendered = " ".join(output_path.read_text(encoding="utf-8").split())
+    assert "already connected through Codex — plus" in rendered
+    assert "current Codex session was kept" in rendered
+
+
+def test_existing_login_can_be_replaced_with_requested_method(
+    monkeypatch,
+) -> None:
+    login_modes: list[bool] = []
+    monkeypatch.setattr(codex_auth, "_interactive_terminal", lambda: True)
+    monkeypatch.setattr(codex_auth, "_select", lambda prompt, choices: "switch")
+    monkeypatch.setattr(
+        codex_auth,
+        "login_codex",
+        lambda console, *, device_code=False: login_modes.append(device_code) or True,
+    )
+    status = CodexAccountStatus(CodexAccountState.CHATGPT)
+
+    assert codex_auth.login_codex_interactively(
+        Console(),
+        device_code=True,
+        account_status=status,
+    )
+    assert login_modes == [True]
+
+
+def test_setup_login_choice_can_select_device_code(monkeypatch) -> None:
+    login_modes: list[bool] = []
+    monkeypatch.setattr(codex_auth, "_interactive_terminal", lambda: True)
+    monkeypatch.setattr(codex_auth, "_select", lambda prompt, choices: "device")
+    monkeypatch.setattr(
+        codex_auth,
+        "login_codex",
+        lambda console, *, device_code=False: login_modes.append(device_code) or True,
+    )
+    status = CodexAccountStatus(CodexAccountState.SIGNED_OUT)
+
+    assert codex_auth.login_codex_interactively(
+        Console(),
+        device_code=None,
+        account_status=status,
+    )
+    assert login_modes == [True]
+
+
+def test_logout_defaults_to_keeping_connected_session(monkeypatch) -> None:
+    monkeypatch.setattr(codex_auth, "_interactive_terminal", lambda: True)
+    monkeypatch.setattr(codex_auth, "_select", lambda prompt, choices: "keep")
+    monkeypatch.setattr(
+        codex_auth,
+        "logout_codex",
+        lambda console: (_ for _ in ()).throw(AssertionError("session was signed out")),
+    )
+    status = CodexAccountStatus(CodexAccountState.CHATGPT)
+
+    assert codex_auth.logout_codex_interactively(
+        Console(),
+        account_status=status,
+    )
+
+
+def test_logout_requires_explicit_sign_out_choice(monkeypatch) -> None:
+    logout_calls: list[bool] = []
+    monkeypatch.setattr(codex_auth, "_interactive_terminal", lambda: True)
+    monkeypatch.setattr(codex_auth, "_select", lambda prompt, choices: "logout")
+    monkeypatch.setattr(
+        codex_auth,
+        "logout_codex",
+        lambda console: logout_calls.append(True) or True,
+    )
+    status = CodexAccountStatus(CodexAccountState.CHATGPT)
+
+    assert codex_auth.logout_codex_interactively(
+        Console(),
+        account_status=status,
+    )
+    assert logout_calls == [True]
+
+
+def test_logout_reports_already_signed_out_without_prompt(monkeypatch) -> None:
+    monkeypatch.setattr(
+        codex_auth,
+        "_select",
+        lambda prompt, choices: (_ for _ in ()).throw(
+            AssertionError("signed-out account prompted")
+        ),
+    )
+    status = CodexAccountStatus(CodexAccountState.SIGNED_OUT)
+
+    assert codex_auth.logout_codex_interactively(
+        Console(),
+        account_status=status,
+    )
+
+
+def test_logout_refuses_noninteractive_session_clear(monkeypatch) -> None:
+    monkeypatch.setattr(codex_auth, "_interactive_terminal", lambda: False)
+    monkeypatch.setattr(
+        codex_auth,
+        "logout_codex",
+        lambda console: (_ for _ in ()).throw(
+            AssertionError("non-interactive session was cleared")
+        ),
+    )
+    status = CodexAccountStatus(CodexAccountState.CHATGPT)
+
+    assert (
+        codex_auth.logout_codex_interactively(
+            Console(),
+            account_status=status,
+        )
+        is False
+    )

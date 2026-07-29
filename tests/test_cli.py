@@ -90,7 +90,7 @@ def test_config_runs_wizard_without_starting_shell(monkeypatch) -> None:
 
 def test_login_forwards_device_code_choice(monkeypatch) -> None:
     login = Mock(return_value=True)
-    monkeypatch.setattr(main, "login_codex", login)
+    monkeypatch.setattr(main, "login_codex_interactively", login)
 
     result = runner.invoke(main.app, ["login", "--device-code"])
 
@@ -100,7 +100,7 @@ def test_login_forwards_device_code_choice(monkeypatch) -> None:
 
 def test_logout_uses_codex_managed_session(monkeypatch) -> None:
     logout = Mock(return_value=True)
-    monkeypatch.setattr(main, "logout_codex", logout)
+    monkeypatch.setattr(main, "logout_codex_interactively", logout)
 
     result = runner.invoke(main.app, ["logout"])
 

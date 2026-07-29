@@ -33,12 +33,12 @@ def test_codex_login_and_logout_slash_commands(monkeypatch) -> None:
     calls: list[tuple[str, bool | None]] = []
     monkeypatch.setattr(
         repl,
-        "login_codex",
+        "login_codex_interactively",
         lambda console, device_code=False: calls.append(("login", device_code)),
     )
     monkeypatch.setattr(
         repl,
-        "logout_codex",
+        "logout_codex_interactively",
         lambda console: calls.append(("logout", None)),
     )
 

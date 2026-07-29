@@ -106,29 +106,9 @@ def _offer_codex_login() -> None:
     if not _interactive_terminal() or not codex_sdk_installed():
         return
 
-    while True:
-        choice = questionary.select(
-            "Connect your ChatGPT account now?",
-            choices=[
-                questionary.Choice(
-                    "Sign in with browser (Recommended)",
-                    value="browser",
-                ),
-                questionary.Choice("Sign in with device code", value="device"),
-                questionary.Choice("Later", value="later"),
-            ],
-            style=ocean_theme,
-        ).ask()
-        choice = check_cancel(choice)
-        if choice is None or choice == "later":
-            return
-        if choice == "RETRY":
-            continue
+    from .codex_auth import login_codex_interactively
 
-        from .codex_auth import login_codex
-
-        login_codex(console, device_code=choice == "device")
-        return
+    login_codex_interactively(console, device_code=None)
 
 
 def run_setup_wizard():

@@ -23,7 +23,7 @@ from rich.console import Console
 from rich.table import Table
 
 from .about import run_about_menu
-from .codex_auth import login_codex, logout_codex
+from .codex_auth import login_codex_interactively, logout_codex_interactively
 from .diagnostics import display_doctor, run_doctor
 from .icons import model_icon, shell_icon, ui_icon, unicode_icons_supported
 from .models import PermissionMode, WorkspaceContext
@@ -163,7 +163,7 @@ def _show_help(console: Console) -> None:
         ("/model [name]", "View or change the model for this session"),
         ("/config", "Run the provider configuration wizard"),
         ("/login [device-code]", "Connect Codex to a ChatGPT account"),
-        ("/logout", "Sign Codex out of ChatGPT"),
+        ("/logout", "Review and clear the Codex-managed account session"),
         ("/theme [ocean|aurora|minimal|contrast|ansi]", "Preview or change theme"),
         ("/motion [full|compact|off]", "Change startup animation"),
         ("/doctor", "Run local configuration and environment checks"),
@@ -564,9 +564,12 @@ def handle_slash_command(
         if argument and argument.lower() != "device-code":
             console.print("[yellow]Use: /login or /login device-code[/yellow]")
         else:
-            login_codex(console, device_code=argument.lower() == "device-code")
+            login_codex_interactively(
+                console,
+                device_code=argument.lower() == "device-code",
+            )
     elif command == "/logout":
-        logout_codex(console)
+        logout_codex_interactively(console)
     elif command == "/theme":
         if not argument:
             if _has_interactive_terminal():

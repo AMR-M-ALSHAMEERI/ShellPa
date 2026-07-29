@@ -81,7 +81,7 @@ def test_codex_setup_can_install_and_start_device_login(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    selections = iter(["codex", "codex/default", "install", "device"])
+    selections = iter(["codex", "codex/default", "install"])
     env_path = tmp_path / ".shellpa.env"
     installed = False
     login_modes: list[bool] = []
@@ -110,13 +110,13 @@ def test_codex_setup_can_install_and_start_device_login(
     monkeypatch.setattr(setup, "install_codex_sdk", install)
     monkeypatch.setattr(
         codex_auth,
-        "login_codex",
+        "login_codex_interactively",
         lambda console, *, device_code=False: login_modes.append(device_code) or True,
     )
 
     assert setup.run_setup_wizard() is True
     assert installed is True
-    assert login_modes == [True]
+    assert login_modes == [None]
     assert dotenv_values(env_path)["SHELLPA_PROVIDER"] == "codex"
 
 

@@ -15,7 +15,7 @@ from .activity import (
     run_first_time_onboarding,
     select_standard_approval,
 )
-from .codex_auth import login_codex, logout_codex
+from .codex_auth import login_codex_interactively, logout_codex_interactively
 from .config import load_config
 from .diagnostics import display_doctor, run_doctor
 from .event_log import SessionLogger
@@ -526,14 +526,14 @@ def login_command(
     ),
 ) -> None:
     """Connect ShellPa's Codex provider to a ChatGPT account."""
-    if not login_codex(console, device_code=device_code):
+    if not login_codex_interactively(console, device_code=device_code):
         raise typer.Exit(code=1)
 
 
 @app.command("logout")
 def logout_command() -> None:
-    """Sign the embedded Codex provider out of ChatGPT."""
-    if not logout_codex(console):
+    """Review and clear the Codex-managed account session."""
+    if not logout_codex_interactively(console):
         raise typer.Exit(code=1)
 
 
