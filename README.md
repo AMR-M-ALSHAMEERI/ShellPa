@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/AMR-M-ALSHAMEERI/ShellPa/main/docs/assets/shellpa-logo.png" alt="ShellPa logo" width="190">
+  <img src="docs/assets/shellpa-mark.png" alt="ShellPa command-line logo" width="340">
 </p>
 
 <h1 align="center">ShellPa</h1>
