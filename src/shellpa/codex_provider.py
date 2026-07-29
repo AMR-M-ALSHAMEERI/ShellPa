@@ -14,6 +14,7 @@ from typing import Any
 
 from .models import CommandProposal
 
+CODEX_SDK_REQUIREMENT = "openai-codex==0.144.4"
 CODEX_EXTRA_INSTALL = 'python -m pip install "shellpa[codex]"'
 DEFAULT_CODEX_TIMEOUT_SECONDS = 90.0
 COMMAND_OUTPUT_SCHEMA: dict[str, Any] = {

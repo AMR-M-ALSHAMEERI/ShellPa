@@ -1,11 +1,19 @@
 import os
+import sys
 from pathlib import Path
+from typing import Literal
 
 import pyfiglet
 import questionary
 from rich.console import Console
 
 from . import __version__
+from .codex_install import (
+    codex_install_command,
+    format_command,
+    install_codex_sdk,
+)
+from .codex_provider import codex_sdk_installed
 from .icons import provider_icon
 
 console = Console()
@@ -48,6 +56,79 @@ def check_cancel(value):
         # They don't want to cancel, but we'd need to re-prompt them.
         # To avoid complex loops for every step, we return "RETRY" or False
         return "RETRY"
+
+
+def _interactive_terminal() -> bool:
+    """Return whether setup can safely offer state-changing interactive actions."""
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _prepare_codex_provider() -> Literal["ready", "later", "back"] | None:
+    """Offer an explicit install choice before Codex configuration is saved."""
+    if codex_sdk_installed():
+        return "ready"
+
+    command = format_command(codex_install_command())
+    if not _interactive_terminal():
+        console.print(
+            "[yellow]Codex is not installed. Automatic installation is disabled "
+            "outside an interactive terminal.[/yellow]"
+        )
+        console.print(f"[dim]Run this when you are ready: {command}[/dim]")
+        return "later"
+
+    while True:
+        choice = questionary.select(
+            "The embedded Codex provider is required. What would you like to do?",
+            choices=[
+                questionary.Choice("Install now (Recommended)", value="install"),
+                questionary.Choice("Not now", value="later"),
+                questionary.Choice(
+                    "Return to provider selection",
+                    value="back",
+                ),
+            ],
+            style=ocean_theme,
+        ).ask()
+        choice = check_cancel(choice)
+        if choice is None:
+            return None
+        if choice == "RETRY":
+            continue
+        if choice in {"later", "back"}:
+            return choice
+        if install_codex_sdk(console):
+            return "ready"
+
+
+def _offer_codex_login() -> None:
+    """Offer Codex-managed sign-in after the provider is available."""
+    if not _interactive_terminal() or not codex_sdk_installed():
+        return
+
+    while True:
+        choice = questionary.select(
+            "Connect your ChatGPT account now?",
+            choices=[
+                questionary.Choice(
+                    "Sign in with browser (Recommended)",
+                    value="browser",
+                ),
+                questionary.Choice("Sign in with device code", value="device"),
+                questionary.Choice("Later", value="later"),
+            ],
+            style=ocean_theme,
+        ).ask()
+        choice = check_cancel(choice)
+        if choice is None or choice == "later":
+            return
+        if choice == "RETRY":
+            continue
+
+        from .codex_auth import login_codex
+
+        login_codex(console, device_code=choice == "device")
+        return
 
 
 def run_setup_wizard():
@@ -162,6 +243,13 @@ def run_setup_wizard():
                     break
             break  # break model loop
 
+        if provider == "codex":
+            codex_state = _prepare_codex_provider()
+            if codex_state is None:
+                return False
+            if codex_state == "back":
+                continue
+
         # 3. Enter an API key only for providers that require one.
         api_key_name: str | None = None
         api_key: str | None = None
@@ -223,9 +311,10 @@ def run_setup_wizard():
 
     console.print("\n[bold green]Configuration saved successfully! ✨[/bold green]")
     if provider == "codex":
-        console.print(
-            "[cyan]Install the embedded provider with "
-            'python -m pip install "shellpa[codex]", then run '
-            "shellpa login.[/cyan]"
-        )
+        if codex_sdk_installed():
+            _offer_codex_login()
+        else:
+            command = format_command(codex_install_command())
+            console.print(f"[cyan]When you are ready, run: {command}[/cyan]")
+            console.print("[dim]Then start sign-in with: shellpa login[/dim]")
     return True
