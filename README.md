@@ -14,6 +14,7 @@
   <img src="https://img.shields.io/badge/version-0.3.0-14b8e6" alt="Version 0.3.0">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776ab?logo=python&logoColor=white" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-071a3d" alt="Windows, Linux, and macOS">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-C9A24E" alt="MIT License"></a>
 </p>
 
 ShellPa translates natural-language intent into a command for the active
@@ -208,8 +209,12 @@ before proposing a change. Report suspected vulnerabilities through the
 [security policy](https://github.com/AMR-M-ALSHAMEERI/ShellPa/blob/main/SECURITY.md),
 not through a public issue.
 
+## License
+
+ShellPa is available under the [MIT License](LICENSE).
+
 ## Release status
 
 Version 0.3.0 is the first public-release candidate. Public PyPI publication,
-repository visibility, and licensing are completed through the controlled
-release process rather than from the normal CI workflow.
+repository visibility, and release authorization are handled through the
+controlled release process rather than from the normal CI workflow.

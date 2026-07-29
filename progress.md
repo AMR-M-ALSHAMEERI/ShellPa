@@ -163,6 +163,6 @@ Completed public-release preparation:
 5. validated the wheel, source archive, PyPI description, and clean
    installation.
 
-Remaining owner-controlled gates are license selection, repository visibility,
-PyPI/TestPyPI Trusted Publisher configuration, TestPyPI acceptance, and final
-PyPI publication.
+Remaining owner-controlled gates are repository visibility, PyPI/TestPyPI
+Trusted Publisher configuration, TestPyPI acceptance, and final PyPI
+publication.
