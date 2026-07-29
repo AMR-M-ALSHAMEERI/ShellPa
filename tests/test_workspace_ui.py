@@ -47,19 +47,18 @@ def test_workspace_identity_is_compact_and_filename_free(tmp_path: Path) -> None
     assert str(tmp_path) not in identity
 
 
-def test_workspace_display_separates_local_paths_from_provider_summary(
-    tmp_path: Path,
-) -> None:
+def test_workspace_display_separates_local_paths_from_provider_summary() -> None:
     output = StringIO()
     console = Console(file=output, width=120, color_system=None)
+    local_root = Path("local-only-workspace")
 
-    display_workspace_context(console, workspace_context(tmp_path))
+    display_workspace_context(console, workspace_context(local_root))
 
     rendered = output.getvalue()
     assert "ShellPa workspace context" in rendered
-    assert str(tmp_path) in rendered
+    assert str(local_root) in rendered
     assert "Provider-safe summary" in rendered
     provider_section = rendered.split("Provider-safe summary", maxsplit=1)[1]
-    assert str(tmp_path) not in provider_section
+    assert str(local_root) not in provider_section
     assert "Project types: docker, python" in provider_section
     assert "Git changes: 2 tracked, 1 untracked" in provider_section
