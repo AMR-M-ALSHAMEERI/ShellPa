@@ -2,12 +2,13 @@
 
 ## Current release
 
-- Version: `0.2.0`
-- Status: tested release checkpoint
+- Version: `0.3.0`
+- Status: owner-accepted private release checkpoint
 - Repository: private
 - Supported Python: 3.10 and newer
 - Supported systems: Windows, Linux, and macOS
-- Public PyPI distribution: deferred until after v0.3
+- Public PyPI distribution: not published; requires a separate owner-approved
+  release process
 
 ## Product direction
 
@@ -27,7 +28,7 @@ User intent
     -> redacted recovery when needed
 ```
 
-## Completed in v0.2
+## Completed through v0.2
 
 ### Domain and configuration foundation
 
@@ -86,37 +87,75 @@ User intent
 - Added package build verification and public v0.2 migration documentation.
 - Passed 171 automated tests and real-terminal acceptance testing.
 
+## Completed in v0.3
+
+### Workspace awareness
+
+- Added a typed, read-only `WorkspaceContext`.
+- Added deterministic workspace-boundary resolution.
+- Added allowlisted project-marker and project-type detection.
+- Added known-tool and active Python-environment detection without launching
+  detected tools.
+- Added bounded Git branch, detached/unborn state, and tracked/untracked change
+  counts without retaining filenames.
+- Added `shellpa context`, `/context`, and a compact interactive workspace
+  identity.
+- Kept local paths separate from the smaller provider-safe summary.
+
+### Safe generation integration
+
+- Added the redacted workspace summary to initial command generation and
+  recovery.
+- Framed workspace metadata as untrusted observations that cannot override user
+  intent or ShellPa safety policy.
+- Preserved one workspace snapshot throughout an execution/recovery flow.
+- Continued to exclude source contents, secret-file contents, and arbitrary
+  Git filenames.
+
+### Optional Codex subscription provider
+
+- Added a provider-neutral generation boundary.
+- Added the optional pinned `openai-codex` SDK and its embedded runtime.
+- Added interactive installation after explicit approval.
+- Added browser and device-code ChatGPT authentication without ShellPa reading
+  or storing credentials.
+- Isolated Codex generation in an ephemeral temporary workspace with read-only
+  sandboxing, deny-all approval, disabled tools, strict structured output, and
+  a bounded timeout.
+- Added existing-session protection, safe-default account switching, and
+  confirmed logout.
+- Preserved ShellPa's deterministic safety engine as the sole execution
+  authority.
+
+### Hardening and acceptance
+
+- Added empty repository, detached head, missing Git, non-repository, bounded
+  large status, spaces, and Unicode-path tests.
+- Added wheel and source-archive privacy inspection.
+- Verified Windows, Ubuntu, and macOS builds with the optional Codex runtime.
+- Completed owner-driven Windows terminal acceptance.
+
 ## Current quality status
 
 - Ruff formatting: passing
 - Ruff linting: passing
-- Mypy: passing across 17 source modules
-- Pytest: 171 tests passing
+- Mypy: passing across 22 source modules
+- Pytest: 246 tests passing
 - Dependency check: passing
 - Wheel and source distribution builds: passing
 - Secret and private-file package inspection: passing
 - Manual Windows terminal test: passing
 
-## Next release: v0.3
+## Next direction
 
-The recommended v0.3 focus is workspace awareness:
-
-- detect Git repository state, branch, and modified files;
-- identify Python, Node.js, Docker, and other project types;
-- identify available project tooling and package managers;
-- establish an explicit workspace boundary;
-- build a structured, privacy-conscious `WorkspaceContext`;
-- show the user which workspace facts influence a generated command;
-- test detection across Windows, Linux, and macOS.
-
-The first implementation should be read-only. Conversational memory,
-multi-step planning, script generation, checkpoints, and plugins should build
-on top of the workspace context rather than precede it.
+No v0.4 feature scope is committed yet. Public repository preparation,
+TestPyPI, clean-environment installation testing, and PyPI publication are
+separate release activities and require explicit owner approval.
 
 ## Distribution plan
 
-ShellPa remains private during v0.2 and v0.3 development. After v0.3 is
-finished and accepted:
+ShellPa remains private at the v0.3 checkpoint. If public distribution is
+approved later:
 
 1. review the public repository content and license;
 2. reserve and verify the package name;

@@ -30,24 +30,35 @@ source venv/bin/activate
 ```powershell
 .\venv\Scripts\Activate.ps1
 ```
-*(If Windows gives you an Execution Policy error, run `Set-ExecutionPolicy Unrestricted -Scope CurrentUser` first).*
+*(If Windows blocks activation, run
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then try again.)*
 
 ### 3. Install Dependencies
 ```bash
 # Install the required libraries (Typer, Rich, LiteLLM, Pydantic)
 pip install -r requirements.txt
 
-# Install the ShellPa tool locally so the `shellpa` command works globally
+# Install ShellPa into the active project environment
 pip install -e .
 ```
 
-### 4. Configure API Keys
-ShellPa includes an interactive, arrow-key onboarding wizard to securely set up your API keys and preferred AI model. 
-Simply run the CLI for the first time, and it will guide you through choosing OpenRouter, OpenAI, Google Gemini, or Anthropic!
+### 4. Configure a Provider
+ShellPa includes an interactive, arrow-key wizard for choosing OpenRouter,
+OpenAI, Google Gemini, Anthropic, or the optional OpenAI Codex provider for
+eligible ChatGPT subscriptions.
 
-## 🚀 Usage
+```bash
+shellpa config
+```
 
-Once installed, simply run the command from any directory:
+API-backed providers request their corresponding API key. The Codex
+subscription provider does not request an OpenAI API key. If its embedded SDK
+is missing, ShellPa can install the pinned provider after explicit approval and
+then offer browser or device-code sign-in.
+
+## Usage
+
+Once installed and the project environment is active, run:
 ```bash
 shellpa "Find all python files in this project"
 ```
@@ -60,6 +71,14 @@ shellpa
 ### Extra Commands:
 - Change your Model or Provider later:
   `shellpa config`
+- Inspect workspace facts and the provider-safe summary:
+  `shellpa context`
+- Connect a ChatGPT account for the Codex provider:
+  `shellpa login`
+- Review or clear the Codex-managed account session:
+  `shellpa logout`
+- Check the installation, provider, Codex account state, and environment:
+  `shellpa doctor`
 - View developer info and explore their GitHub interactive profiles via `webbrowser`:
   `shellpa about`
 - Try a dry-run to see the formatting without executing:
@@ -67,7 +86,17 @@ shellpa
 - Force execution without approval:
   `shellpa "echo 'Hello'" --force`
 
-## 🛠 Troubleshooting (Mac Specific)
+## Troubleshooting
 - **"command not found: shellpa"**: Ensure your `venv` is activated. If it still fails, ensure you ran `pip install -e .` with the dot at the end!
 - **LiteLLM AuthenticationError**: Check that your `.env` starts with exactly `OPENROUTER_API_KEY=` or `OPENAI_API_KEY=` and has no quotes around the key itself.
+- **Codex is signed out**: Run `shellpa login`, or use
+  `shellpa login --device-code` if a browser callback is unavailable.
 - **Python version issues**: ShellPa requires Python 3.10+. If your Mac defaults to python 2.7, make sure to explicitly use `python3` and `pip3` during setup.
+
+## Workspace Privacy
+
+ShellPa detects bounded workspace metadata such as project type, known tools,
+Git state and change counts, and the active Python environment. It does not read
+source contents, `.env` contents, credential files, or arbitrary Git filenames
+to create the provider-safe workspace summary. Run `shellpa context` to inspect
+exactly what ShellPa knows and what may influence generation.
