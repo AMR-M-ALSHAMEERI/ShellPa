@@ -23,6 +23,7 @@ from .models import (
 GIT_TIMEOUT_SECONDS = 2.0
 MAX_GIT_STATUS_BYTES = 64_000
 MAX_GIT_STATUS_ENTRIES = 1_000
+MAX_PROVIDER_GIT_LABEL_CHARS = 80
 
 PROJECT_MARKERS: dict[str, ProjectType] = {
     "pyproject.toml": ProjectType.PYTHON,
@@ -346,6 +347,9 @@ def format_provider_workspace_summary(context: WorkspaceContext) -> str:
         lines.append(f"Available tools: {', '.join(context.available_tools)}")
     if context.git.is_repository:
         branch = context.git.branch or context.git.head_state.value
+        branch = " ".join(branch.split())
+        branch = branch.replace("<", "\\u003c").replace(">", "\\u003e")
+        branch = branch[:MAX_PROVIDER_GIT_LABEL_CHARS]
         lines.append(f"Git: {branch}")
         lines.append(
             "Git changes: "

@@ -42,7 +42,7 @@ def test_dry_run_never_executes(
     monkeypatch.setattr(
         main,
         "generate_command",
-        lambda query, env_info: CommandProposal(
+        lambda query, env_info, workspace_summary=None: CommandProposal(
             command="Get-Date",
             explanation="Show the date.",
         ),
@@ -69,7 +69,7 @@ def test_approved_command_executes_once(
     monkeypatch.setattr(
         main,
         "generate_command",
-        lambda query, env_info: CommandProposal(
+        lambda query, env_info, workspace_summary=None: CommandProposal(
             command="Get-Date",
             explanation="Show the date.",
         ),
@@ -115,25 +115,38 @@ def test_recovery_proposal_is_confirmed_and_executed(
         ]
     )
     recovery_contexts: list[RecoveryContext] = []
+    workspace_summaries: list[str | None] = []
+    workspace_context = object()
+    monkeypatch.setattr(
+        main,
+        "format_provider_workspace_summary",
+        lambda context: "Project types: python\nGit: main",
+    )
+
+    def generate_initial(query, env_info, workspace_summary=None):
+        workspace_summaries.append(workspace_summary)
+        return CommandProposal(
+            command="invalid-list",
+            explanation="Attempt to list files.",
+        )
+
+    def generate_recovery(context, env_info, workspace_summary=None):
+        recovery_contexts.append(context)
+        workspace_summaries.append(workspace_summary)
+        return CommandProposal(
+            command="Get-ChildItem",
+            explanation="Use the PowerShell command.",
+        )
 
     monkeypatch.setattr(
         main,
         "generate_command",
-        lambda query, env_info: CommandProposal(
-            command="invalid-list",
-            explanation="Attempt to list files.",
-        ),
+        generate_initial,
     )
     monkeypatch.setattr(
         main,
         "generate_recovery_command",
-        lambda context, env_info: (
-            recovery_contexts.append(context)
-            or CommandProposal(
-                command="Get-ChildItem",
-                explanation="Use the PowerShell command.",
-            )
-        ),
+        generate_recovery,
     )
     monkeypatch.setattr(
         main.questionary,
@@ -152,9 +165,14 @@ def test_recovery_proposal_is_confirmed_and_executed(
         {"os": "Windows", "shell": "powershell"},
         force=False,
         dry_run=False,
+        workspace_context=workspace_context,
     )
 
     assert executed == ["invalid-list", "Get-ChildItem"]
+    assert workspace_summaries == [
+        "Project types: python\nGit: main",
+        "Project types: python\nGit: main",
+    ]
     assert recovery_contexts[0].exit_code == 127
     assert recovery_contexts[0].error_message == "command not found"
 
@@ -165,7 +183,7 @@ def test_plan_mode_never_requests_permission_or_executes(
     monkeypatch.setattr(
         main,
         "generate_command",
-        lambda query, env_info: CommandProposal(
+        lambda query, env_info, workspace_summary=None: CommandProposal(
             command="Get-Date",
             explanation="Show the date.",
         ),
@@ -197,7 +215,7 @@ def test_trusted_mode_executes_known_read_only_without_prompt(
     monkeypatch.setattr(
         main,
         "generate_command",
-        lambda query, env_info: CommandProposal(
+        lambda query, env_info, workspace_summary=None: CommandProposal(
             command="Get-Date",
             explanation="Show the date.",
         ),
@@ -234,7 +252,7 @@ def test_force_does_not_bypass_high_risk_typed_confirmation(
     monkeypatch.setattr(
         main,
         "generate_command",
-        lambda query, env_info: CommandProposal(
+        lambda query, env_info, workspace_summary=None: CommandProposal(
             command="git push --force origin main",
             explanation="Rewrite remote history.",
         ),
@@ -269,7 +287,7 @@ def test_critical_command_is_never_executed(
     monkeypatch.setattr(
         main,
         "generate_command",
-        lambda query, env_info: CommandProposal(
+        lambda query, env_info, workspace_summary=None: CommandProposal(
             command="Remove-Item -Recurse .",
             explanation="Delete the current workspace.",
         ),
@@ -296,7 +314,7 @@ def test_recovery_command_receives_fresh_critical_assessment(
     monkeypatch.setattr(
         main,
         "generate_command",
-        lambda query, env_info: CommandProposal(
+        lambda query, env_info, workspace_summary=None: CommandProposal(
             command="invalid-list",
             explanation="Attempt to list files.",
         ),
@@ -343,7 +361,7 @@ def test_cancelled_command_does_not_request_recovery(
     monkeypatch.setattr(
         main,
         "generate_command",
-        lambda query, env_info: CommandProposal(
+        lambda query, env_info, workspace_summary=None: CommandProposal(
             command="Get-Date",
             explanation="Show the date.",
         ),
@@ -383,7 +401,7 @@ def test_timeout_and_passthrough_are_forwarded_to_executor(
     monkeypatch.setattr(
         main,
         "generate_command",
-        lambda query, env_info: CommandProposal(
+        lambda query, env_info, workspace_summary=None: CommandProposal(
             command="Get-Date",
             explanation="Show the date.",
         ),
@@ -420,7 +438,7 @@ def test_query_processing_logs_metadata_not_content(
     monkeypatch.setattr(
         main,
         "generate_command",
-        lambda query, env_info: CommandProposal(
+        lambda query, env_info, workspace_summary=None: CommandProposal(
             command="Get-Date",
             explanation="Show the date.",
         ),

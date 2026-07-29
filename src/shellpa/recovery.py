@@ -47,7 +47,7 @@ def build_recovery_context(
     """Create redacted, structured facts for a correction request."""
     return RecoveryContext(
         original_query=original_query,
-        failed_command=request.command,
+        failed_command=redact_sensitive_text(request.command),
         error_message=redact_sensitive_text(result_error_message(result)),
         exit_code=result.exit_code,
         working_directory=request.working_directory,

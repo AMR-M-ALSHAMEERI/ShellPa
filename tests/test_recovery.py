@@ -29,7 +29,7 @@ def test_redact_sensitive_text_hides_common_secret_shapes(
 
 def test_build_recovery_context_preserves_structured_status_and_redacts() -> None:
     request = ExecutionRequest(
-        command="curl example",
+        command="curl -H TOKEN=my-command-secret example",
         operating_system="Linux",
         shell="bash",
         working_directory=Path("/work"),
@@ -51,3 +51,4 @@ def test_build_recovery_context_preserves_structured_status_and_redacts() -> Non
     assert context.output_truncated is True
     assert context.partial_effect_possible is True
     assert "my-secret-token" not in context.error_message
+    assert "my-command-secret" not in context.failed_command

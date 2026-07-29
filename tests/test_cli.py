@@ -136,6 +136,45 @@ def test_context_is_offline_and_does_not_start_provider(monkeypatch) -> None:
     run_shellpa.assert_not_called()
 
 
+def test_direct_query_passes_one_workspace_snapshot_to_generation(monkeypatch) -> None:
+    workspace_context = Mock()
+    process_query = Mock()
+    event_logger = Mock()
+    monkeypatch.setattr(
+        main,
+        "load_config",
+        Mock(return_value=Mock(provider="openai", model_name="openai/test")),
+    )
+    monkeypatch.setattr(
+        main,
+        "detect_environment",
+        Mock(return_value={"os": "Windows", "shell": "powershell"}),
+    )
+    monkeypatch.setattr(main, "load_ux_settings", Mock(return_value=Mock()))
+    monkeypatch.setattr(
+        main,
+        "SessionLogger",
+        Mock(return_value=event_logger),
+    )
+    monkeypatch.setattr(
+        main,
+        "detect_workspace",
+        Mock(return_value=workspace_context),
+    )
+    monkeypatch.setattr(main, "process_query", process_query)
+
+    main._run_shellpa(
+        "list files",
+        force=False,
+        dry_run=True,
+        mode=main.PermissionMode.ASK,
+        timeout_seconds=None,
+        passthrough=False,
+    )
+
+    assert process_query.call_args.args[-1] is workspace_context
+
+
 def test_about_stays_in_hub_until_user_leaves(monkeypatch) -> None:
     monkeypatch.setattr(
         main,

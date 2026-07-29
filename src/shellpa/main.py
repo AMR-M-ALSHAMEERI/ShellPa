@@ -26,6 +26,7 @@ from .models import (
     PermissionMode,
     RecoveryContext,
     RiskAssessment,
+    WorkspaceContext,
 )
 from .os_detect import detect_environment
 from .recovery import build_recovery_context
@@ -43,7 +44,7 @@ from .ux import (
     play_startup_reveal,
     questionary_style,
 )
-from .workspace import detect_workspace
+from .workspace import detect_workspace, format_provider_workspace_summary
 from .workspace_ui import display_workspace_context, display_workspace_identity
 
 
@@ -127,9 +128,15 @@ def process_query(
     passthrough: bool = False,
     ux_settings: UXSettings | None = None,
     event_logger: SessionLogger | None = None,
+    workspace_context: WorkspaceContext | None = None,
 ):
     """Processes a single intent-to-command operation natively with Auto-Recovery."""
     active_settings = ux_settings or UXSettings()
+    workspace_summary = (
+        format_provider_workspace_summary(workspace_context)
+        if workspace_context is not None
+        else None
+    )
     is_recovery = False
     recovery_context: RecoveryContext | None = None
     max_attempts = 4  # Initial try + 3 retries
@@ -144,9 +151,13 @@ def process_query(
                 if is_recovery:
                     if recovery_context is None:
                         raise RuntimeError("Recovery context is unavailable.")
-                    response = generate_recovery_command(recovery_context, env_info)
+                    response = generate_recovery_command(
+                        recovery_context,
+                        env_info,
+                        workspace_summary,
+                    )
                 else:
-                    response = generate_command(query, env_info)
+                    response = generate_command(query, env_info, workspace_summary)
             except Exception as e:
                 console.print(f"[bold red]Failed to generate command:[/] {e}")
                 raise typer.Exit(code=1) from e
@@ -332,6 +343,7 @@ def _run_shellpa(
     )
 
     try:
+        workspace_context = detect_workspace()
         if query is not None:
             process_query(
                 query,
@@ -343,6 +355,7 @@ def _run_shellpa(
                 passthrough,
                 ux_settings,
                 event_logger,
+                workspace_context,
             )
             return
 
@@ -353,7 +366,6 @@ def _run_shellpa(
             config_status.model_name,
         )
         display_session_greeting(console, ux_settings)
-        workspace_context = detect_workspace()
         display_workspace_identity(console, workspace_context)
         run_first_time_onboarding(console, ux_settings)
         state = InteractiveState(
@@ -376,6 +388,7 @@ def _run_shellpa(
                     passthrough,
                     ux_settings,
                     event_logger,
+                    state.workspace,
                 )
             except typer.Exit:
                 pass
