@@ -5,7 +5,6 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TEXT_FILES = [
     ROOT / "README.md",
     ROOT / "CHANGELOG.md",
-    ROOT / "progress.md",
     ROOT / "pyproject.toml",
     *sorted((ROOT / "docs").glob("*.md")),
     *sorted((ROOT / "src" / "shellpa").glob("*.py")),
