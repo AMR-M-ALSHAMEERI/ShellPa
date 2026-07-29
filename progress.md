@@ -3,12 +3,11 @@
 ## Current release
 
 - Version: `0.3.0`
-- Status: owner-accepted private release checkpoint
-- Repository: private
+- Status: public release candidate
+- Repository: private pending the final public-release gate
 - Supported Python: 3.10 and newer
 - Supported systems: Windows, Linux, and macOS
-- Public PyPI distribution: not published; requires a separate owner-approved
-  release process
+- Public PyPI distribution: not published
 
 ## Product direction
 
@@ -140,7 +139,7 @@ User intent
 - Ruff formatting: passing
 - Ruff linting: passing
 - Mypy: passing across 22 source modules
-- Pytest: 246 tests passing
+- Pytest: 247 tests passing
 - Dependency check: passing
 - Wheel and source distribution builds: passing
 - Secret and private-file package inspection: passing
@@ -148,18 +147,22 @@ User intent
 
 ## Next direction
 
-No v0.4 feature scope is committed yet. Public repository preparation,
-TestPyPI, clean-environment installation testing, and PyPI publication are
-separate release activities and require explicit owner approval.
+No v0.4 feature scope is committed yet. Version 0.3.0 is being prepared as the
+first public release.
 
 ## Distribution plan
 
-ShellPa remains private at the v0.3 checkpoint. If public distribution is
-approved later:
+Completed public-release preparation:
 
-1. review the public repository content and license;
-2. reserve and verify the package name;
-3. publish a release candidate to TestPyPI;
-4. test installation in clean Windows, Linux, and macOS environments;
-5. make the GitHub repository public if approved;
-6. publish the stable package to PyPI.
+1. verified that the normalized `shellpa` name is unregistered on PyPI and
+   TestPyPI;
+2. audited reachable Git history for credentials and local-only files;
+3. prepared public package metadata, a professional README, and project
+   identity assets;
+4. added a manually triggered Trusted Publishing workflow;
+5. validated the wheel, source archive, PyPI description, and clean
+   installation.
+
+Remaining owner-controlled gates are license selection, repository visibility,
+PyPI/TestPyPI Trusted Publisher configuration, TestPyPI acceptance, and final
+PyPI publication.

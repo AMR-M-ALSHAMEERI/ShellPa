@@ -1,102 +1,215 @@
-# ShellPa
+<p align="center">
+  <img src="https://raw.githubusercontent.com/AMR-M-ALSHAMEERI/ShellPa/main/docs/assets/shellpa-logo.png" alt="ShellPa logo" width="190">
+</p>
 
-A cross-platform CLI Agent for performing system tasks via natural language.
-ShellPa automatically detects if you are using Windows (cmd/PowerShell) or macOS/Linux (zsh/bash) and translates English instructions into exactly the right terminal dialect.
+<h1 align="center">ShellPa</h1>
 
-## Setup (Mac / Linux / Windows)
+<p align="center">
+  A safety-conscious, cross-platform terminal assistant.
+  Describe the outcome; review the native command; stay in control.
+</p>
 
-Welcome to ShellPa project! Follow these exact steps to clone the repo, install the dependencies, and get the agent running on your local machine.
+<p align="center">
+  <a href="https://github.com/AMR-M-ALSHAMEERI/ShellPa/actions/workflows/ci.yml"><img src="https://github.com/AMR-M-ALSHAMEERI/ShellPa/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/version-0.3.0-14b8e6" alt="Version 0.3.0">
+  <img src="https://img.shields.io/badge/Python-3.10%2B-3776ab?logo=python&logoColor=white" alt="Python 3.10+">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-071a3d" alt="Windows, Linux, and macOS">
+</p>
 
-### 1. Clone & Setup Virtual Environment
+ShellPa translates natural-language intent into a command for the active
+operating system and shell. Before anything runs, ShellPa applies a
+deterministic local safety policy and presents the proposal for review.
+
+```text
+User intent
+    -> structured command proposal
+    -> deterministic safety assessment
+    -> permission decision
+    -> observable execution
+    -> redacted recovery when needed
+```
+
+## Why ShellPa
+
+- **Cross-platform commands** — supports PowerShell, CMD, Bash, and Zsh.
+- **Deterministic safety** — the model proposes; ShellPa decides whether a
+  command may execute.
+- **Interactive terminal UX** — themes, motion settings, history, completion,
+  activity states, and keyboard navigation.
+- **Workspace awareness** — detects bounded project, Git, tool, and Python
+  environment metadata without reading source contents.
+- **Provider choice** — supports OpenRouter, OpenAI API, Gemini, Anthropic, and
+  eligible ChatGPT subscriptions through the optional Codex provider.
+- **Private by design** — diagnostics and recovery exclude credentials,
+  environment values, command output, and arbitrary Git filenames.
+
+## Installation
+
+ShellPa requires Python 3.10 or newer. For a standalone command-line
+application, `pipx` is recommended because it creates an isolated environment
+while making `shellpa` available from any terminal.
+
 ```bash
-git clone <repository_url>
-cd shellpa
-
-# Create the virtual environment
-python3 -m venv venv
-or
-py -m venv venv
+pipx install shellpa
 ```
 
-### 2. Activate the Environment
-You must activate the environment every time you open a new terminal to work on this project.
+For ChatGPT subscription access through the embedded Codex provider:
 
-**Mac / Linux (zsh or bash):**
 ```bash
-source venv/bin/activate
+pipx install "shellpa[codex]"
 ```
 
-**Windows (PowerShell):**
-```powershell
-.\venv\Scripts\Activate.ps1
-```
-*(If Windows blocks activation, run
-`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then try again.)*
+The configuration wizard can also install the optional Codex provider after
+explicit approval. A separate Codex CLI installation is not required.
 
-### 3. Install Dependencies
-```bash
-# Install the required libraries (Typer, Rich, LiteLLM, Pydantic)
-pip install -r requirements.txt
+## Quick start
 
-# Install ShellPa into the active project environment
-pip install -e .
-```
-
-### 4. Configure a Provider
-ShellPa includes an interactive, arrow-key wizard for choosing OpenRouter,
-OpenAI, Google Gemini, Anthropic, or the optional OpenAI Codex provider for
-eligible ChatGPT subscriptions.
+Configure a provider:
 
 ```bash
 shellpa config
 ```
 
-API-backed providers request their corresponding API key. The Codex
-subscription provider does not request an OpenAI API key. If its embedded SDK
-is missing, ShellPa can install the pinned provider after explicit approval and
-then offer browser or device-code sign-in.
+Run a natural-language request:
 
-## Usage
-
-Once installed and the project environment is active, run:
 ```bash
-shellpa "Find all python files in this project"
+shellpa "show the five largest files in this directory"
 ```
 
-If you don't provide a prompt, it drops you into our beautiful interactive REPL mode!
+Preview without execution:
+
+```bash
+shellpa "show the five largest files in this directory" --dry-run
+```
+
+Open the interactive session:
+
 ```bash
 shellpa
 ```
 
-### Extra Commands:
-- Change your Model or Provider later:
-  `shellpa config`
-- Inspect workspace facts and the provider-safe summary:
-  `shellpa context`
-- Connect a ChatGPT account for the Codex provider:
-  `shellpa login`
-- Review or clear the Codex-managed account session:
-  `shellpa logout`
-- Check the installation, provider, Codex account state, and environment:
-  `shellpa doctor`
-- View developer info and explore their GitHub interactive profiles via `webbrowser`:
-  `shellpa about`
-- Try a dry-run to see the formatting without executing:
-  `shellpa "list my desktop files" --dry-run`
-- Force execution without approval:
-  `shellpa "echo 'Hello'" --force`
+Inside the session, use `/help` to see all interactive controls.
 
-## Troubleshooting
-- **"command not found: shellpa"**: Ensure your `venv` is activated. If it still fails, ensure you ran `pip install -e .` with the dot at the end!
-- **LiteLLM AuthenticationError**: Check that your `.env` starts with exactly `OPENROUTER_API_KEY=` or `OPENAI_API_KEY=` and has no quotes around the key itself.
-- **Codex is signed out**: Run `shellpa login`, or use
-  `shellpa login --device-code` if a browser callback is unavailable.
-- **Python version issues**: ShellPa requires Python 3.10+. If your Mac defaults to python 2.7, make sure to explicitly use `python3` and `pip3` during setup.
+## Providers
 
-## Workspace Privacy
+| Provider | Authentication | API billing |
+| --- | --- | --- |
+| OpenRouter | API key | Provider account |
+| OpenAI | OpenAI Platform API key | OpenAI API account |
+| Google Gemini | API key | Provider account |
+| Anthropic | API key | Provider account |
+| OpenAI Codex | Eligible ChatGPT account | ChatGPT plan limits |
 
-ShellPa detects bounded workspace metadata such as project type, known tools,
-Git state and change counts, and the active Python environment. It does not read
-source contents, `.env` contents, credential files, or arbitrary Git filenames
-to create the provider-safe workspace summary. Run `shellpa context` to inspect
-exactly what ShellPa knows and what may influence generation.
+The Codex path delegates sign-in and session storage to the official embedded
+Codex runtime. ShellPa does not read or store Codex credentials. Existing
+sessions are preserved by default, and logout requires explicit confirmation.
+
+```bash
+shellpa login
+shellpa login --device-code
+shellpa logout
+```
+
+## Safety model
+
+ShellPa assesses every proposed command locally:
+
+| Level | Typical behavior |
+| --- | --- |
+| Read-only | May run automatically only in Trusted mode |
+| Normal | Requires approval unless safely permitted by explicit `--force` |
+| High risk | Requires typed confirmation |
+| Critical | Manual-only; ShellPa will not execute it |
+| Unknown | Requires review and cannot be silently trusted |
+
+Permission modes:
+
+- **Ask** — review commands before execution.
+- **Plan** — display proposals without execution.
+- **Trusted** — automatically runs only commands proven read-only.
+
+`--force` does not bypass critical-policy boundaries.
+
+## Workspace transparency
+
+ShellPa detects only bounded workspace facts:
+
+- workspace boundary and allowlisted project markers;
+- project types and known executable availability;
+- Git branch, detached/unborn state, and change counts;
+- active Python environment type.
+
+It does not read source contents, `.env` contents, credential files, or
+arbitrary Git filenames to create the provider-safe summary.
+
+```bash
+shellpa context
+```
+
+The context view clearly separates local-only paths from the smaller summary
+that may influence a provider request.
+
+## Useful commands
+
+| Command | Purpose |
+| --- | --- |
+| `shellpa` | Open the interactive terminal |
+| `shellpa "<request>"` | Generate, review, and process a command |
+| `shellpa config` | Configure the provider and model |
+| `shellpa context` | Inspect workspace facts and provider-safe context |
+| `shellpa doctor` | Diagnose the local installation without exposing secrets |
+| `shellpa about` | Open the ShellPa identity and project hub |
+| `shellpa version` | Show the installed version |
+
+See the complete
+[command reference](https://github.com/AMR-M-ALSHAMEERI/ShellPa/blob/main/docs/commands.md)
+and
+[v0.3 migration guide](https://github.com/AMR-M-ALSHAMEERI/ShellPa/blob/main/docs/migration-v0.3.md).
+
+## Development
+
+Clone the repository and create a project environment:
+
+```bash
+git clone https://github.com/AMR-M-ALSHAMEERI/ShellPa.git
+cd ShellPa
+python -m venv venv
+```
+
+Activate it:
+
+```bash
+# Windows PowerShell
+.\venv\Scripts\Activate.ps1
+
+# macOS / Linux
+source venv/bin/activate
+```
+
+Install the development and Codex extras:
+
+```bash
+python -m pip install -e ".[dev,codex]"
+```
+
+Run the quality suite:
+
+```bash
+python -m pytest
+python -m ruff format --check .
+python -m ruff check .
+python -m mypy
+python -m build
+python scripts/verify_package_contents.py dist
+```
+
+See [CONTRIBUTING.md](https://github.com/AMR-M-ALSHAMEERI/ShellPa/blob/main/CONTRIBUTING.md)
+before proposing a change. Report suspected vulnerabilities through the
+[security policy](https://github.com/AMR-M-ALSHAMEERI/ShellPa/blob/main/SECURITY.md),
+not through a public issue.
+
+## Release status
+
+Version 0.3.0 is the first public-release candidate. Public PyPI publication,
+repository visibility, and licensing are completed through the controlled
+release process rather than from the normal CI workflow.
