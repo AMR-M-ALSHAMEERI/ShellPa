@@ -1,311 +1,538 @@
+from pathlib import Path
+from time import monotonic
+
+import questionary
 import typer
 from rich.console import Console
-from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.text import Text
-from rich.live import Live
-import pyfiglet
-import time
-import random
-import webbrowser
-import questionary
-from datetime import datetime
-from typing import Optional
+from typer.core import TyperGroup
 
 from . import __version__
+from .about import AboutAction, run_about_menu
+from .activity import (
+    ActivityState,
+    ExecutionActivity,
+    activity_status,
+    run_first_time_onboarding,
+    select_standard_approval,
+)
 from .config import load_config
-from .os_detect import detect_environment
+from .diagnostics import display_doctor, run_doctor
+from .event_log import SessionLogger
+from .executor import execute_command, result_error_message
 from .llm import generate_command, generate_recovery_command
-from .executor import execute_command
-from .setup import run_setup_wizard, ocean_theme
+from .models import (
+    ExecutionRequest,
+    PermissionAction,
+    PermissionMode,
+    RecoveryContext,
+    RiskAssessment,
+)
+from .os_detect import detect_environment
+from .recovery import build_recovery_context
+from .repl import InteractiveState, run_interactive_session
+from .safety import assess_command, decide_permission
+from .setup import run_setup_wizard
+from .ux import (
+    UXSettings,
+    display_execution_failure,
+    display_execution_result,
+    display_proposal_review,
+    display_recovery_heading,
+    display_session_greeting,
+    load_ux_settings,
+    play_startup_reveal,
+    questionary_style,
+)
+
+
+class NaturalLanguageGroup(TyperGroup):
+    """Route unknown first words to `run` for backward-compatible queries."""
+
+    def get_command(self, ctx, cmd_name):
+        command = super().get_command(ctx, cmd_name)
+        if command is not None:
+            return command
+        fallback = super().get_command(ctx, "run")
+        if fallback is not None:
+            ctx.meta["shellpa_query_head"] = cmd_name
+        return fallback
+
 
 app = typer.Typer(
     name="shellpa",
+    cls=NaturalLanguageGroup,
     help="ShellPa: A cross-platform CLI Agent for natural language system execution.",
     add_completion=False,
-    invoke_without_command=True
+    invoke_without_command=True,
+    no_args_is_help=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 console = Console()
 
-def play_startup_animation():
-    # Generate an ASCII art banner for "SHELLPA"
-    banner_text = pyfiglet.figlet_format("SHELLPA", font="slant")
-    # Append the version to the end of the ASCII art exactly, pulling it together
-    banner_text = f"{banner_text.rstrip()}  v{__version__}\n"
-    
-    # helper for appending authors right under the logo
-    def append_authors(text_obj):
-        text_obj.append(f"  Developed by ", style="bold #00ccff")
-        text_obj.append("AMR", style="bold #000066") # Dark blue
-        text_obj.append(" & ", style="bold #00ccff")
-        text_obj.append("KHADIGA\n\n", style="bold #4b0082") # Dark purple
-    
-    # Time-based Greeting
-    hour = datetime.now().hour
-    if hour < 12:
-        greeting = "Good morning!"
-    elif hour < 17:
-        greeting = "Good afternoon!"
-    else:
-        greeting = "Good evening!"
 
-    # Dynamic Subtitles Pool
-    subtitles = [
-        "Your AI CLI Assistant.",
-        "Navigating the terminal so you don't have to.",
-        "Translating thoughts into commands.",
-        "Command line magic, automated.",
-        "From English to Binary in seconds."
-    ]
-    
-    # Follow-up questions
-    questions = [
-        "How can I help you today?",
-        "What is on your mind?",
-        "What shall we execute?",
-        "Ready for your next command.",
-        "What are we building today?",
-        "How can I assist your workflow?"
-    ]
-    
-    # Pick random components and combine them
-    selected_subtitle = f"{greeting} {random.choice(subtitles)} {random.choice(questions)}"
+def request_execution_permission(
+    action: PermissionAction,
+    assessment: RiskAssessment,
+    confirmation_phrase: str | None,
+    *,
+    force: bool,
+    ux_settings: UXSettings | None = None,
+) -> bool:
+    """Collect the authorization required by a permission decision."""
+    prompt_theme = questionary_style(ux_settings or UXSettings())
+    if action is PermissionAction.AUTO_EXECUTE:
+        if force:
+            console.print(
+                "[bold yellow]--force accepted for this known "
+                f"{assessment.risk_level.value} command.[/bold yellow]"
+            )
+        else:
+            console.print("[dim]Trusted mode: known read-only command approved.[/dim]")
+        return True
 
-    # Ocean/Blue theme colors (Blues + Dark Green)
-    aurora_colors = [
-        "#001133", # Deep dark blue
-        "#002244", # Dark navy
-        "#003366", # Navy
-        "#004d00", # Dark Green (as requested)
-        "#0055ff", # Royal blue
-        "#0088ff", # Bright blue
-        "#00ccff"  # Light cyan/blue
-    ]
-    
-    # "Breathing Light Blue" theme colors (Settling phase)
-    breathing_blues = [
-        "#0033cc", "#0055ff", "#0077ff", "#0099ff", 
-        "#00bbff", "#00ddff", "#00ffff", "#e6ffff"
-    ]
-    
-    console.print()  # Visual padding
-    
-    with Live(refresh_per_second=24, transient=False) as live:
-        # Step 1: Rapid Aurora Cycle (Extended length: loops 3 times, slightly slower)
-        cycling_aurora = aurora_colors + aurora_colors[::-1]
-        for _ in range(3):
-            for color in cycling_aurora:
-                styled_text = Text(banner_text, style=color)
-                append_authors(styled_text)
-                # We keep the subtitles hidden during the flash
-                live.update(styled_text)
-                time.sleep(0.07) # Longer delay
+    if action is PermissionAction.TYPED_CONFIRM:
+        phrase = confirmation_phrase or "CONFIRM HIGH RISK"
+        console.print(
+            "[bold red]High-risk operation. Review every target before continuing.[/bold red]"
+        )
+        answer = questionary.text(
+            f"Type exactly: {phrase}",
+            qmark="ShellPa ",
+            style=prompt_theme,
+        ).ask()
+        return bool(answer is not None and answer.strip() == phrase)
 
-        # Step 2: Subtitle Reveal (Typewriter Effect with animated CLI cursor block)
-        typed_subtitle = ""
-        for char in selected_subtitle:
-            typed_subtitle += char
-            styled_text = Text(banner_text, style="#0055ff") # Darker blue base
-            append_authors(styled_text)
-            styled_text.append(f"  {typed_subtitle}", style="italic #00ffff")
-            styled_text.append("█", style="blink #00ffff") # CLI cursor block
-            live.update(styled_text)
-            time.sleep(0.06) # Slower so it lasts
-        
-        # Step 3: Breathing Light Blue Phase (Extended length: breathes 4 times)
-        cycling_blues = breathing_blues + breathing_blues[::-1]
-        step = 0
-        for _ in range(4):  # Breathe in and out 4 times
-            for color in cycling_blues:
-                # Animate a flickering terminal underscore/block at the end instead of an emoji
-                cursor = "█" if (step % 4 < 2) else "_"
-                step += 1
-                
-                styled_text = Text(banner_text, style=color)
-                append_authors(styled_text)
-                styled_text.append(f"  {selected_subtitle} ", style=f"italic {color}")
-                styled_text.append(cursor, style=f"bold {color}")
-                live.update(styled_text)
-                time.sleep(0.06) # Slower breathing, lasts longer
-        
-        # Final Setting State: Bright Icy Blue with a terminal underscore
-        final_color = "#00eeff"
-        styled_text = Text(banner_text, style=final_color)
-        append_authors(styled_text)
-        styled_text.append(f"  {selected_subtitle} _", style=f"italic {final_color}")
-        live.update(styled_text)
+    if console.is_terminal:
+        return select_standard_approval(ux_settings or UXSettings())
 
-def process_query(query: str, env_info: dict, force: bool, dry_run: bool):
+    return bool(
+        questionary.confirm(
+            "Do you want to execute this command?",
+            qmark="ShellPa ",
+            style=prompt_theme,
+            default=False,
+        ).ask()
+    )
+
+
+def process_query(
+    query: str,
+    env_info: dict,
+    force: bool,
+    dry_run: bool,
+    mode: PermissionMode = PermissionMode.ASK,
+    timeout_seconds: float | None = None,
+    passthrough: bool = False,
+    ux_settings: UXSettings | None = None,
+    event_logger: SessionLogger | None = None,
+):
     """Processes a single intent-to-command operation natively with Auto-Recovery."""
-    
+    active_settings = ux_settings or UXSettings()
     is_recovery = False
-    failed_cmd = ""
-    error_msg = ""
+    recovery_context: RecoveryContext | None = None
     max_attempts = 4  # Initial try + 3 retries
-    
+
     for attempt in range(max_attempts):
-        with console.status("[bold cyan]Generating command...[/bold cyan]", spinner="dots"):
+        activity_state = (
+            ActivityState.RECOVERING if is_recovery else ActivityState.GENERATING
+        )
+        generation_started = monotonic()
+        with activity_status(console, activity_state, active_settings):
             try:
                 if is_recovery:
-                    response = generate_recovery_command(query, failed_cmd, error_msg, env_info)
+                    if recovery_context is None:
+                        raise RuntimeError("Recovery context is unavailable.")
+                    response = generate_recovery_command(recovery_context, env_info)
                 else:
                     response = generate_command(query, env_info)
             except Exception as e:
                 console.print(f"[bold red]Failed to generate command:[/] {e}")
-                raise typer.Exit(code=1)
+                raise typer.Exit(code=1) from e
+        if event_logger is not None:
+            event_logger.emit(
+                "generation_completed",
+                attempt=attempt + 1,
+                recovery=is_recovery,
+                duration_ms=round((monotonic() - generation_started) * 1000),
+            )
 
         proposed_command = response.command
-        explanation = response.explanation
-        
-        lexer_name = "powershell" if env_info["shell"] in ["powershell", "cmd"] else "bash"
-        
+
         if not is_recovery:
-            console.print(f"[bold magenta]Detected Environment:[/bold magenta] {env_info['os']} ({env_info['shell']})\n")
+            console.print(
+                f"[bold magenta]Detected Environment:[/bold magenta] {env_info['os']} ({env_info['shell']})\n"
+            )
         else:
-            console.print(f"\n[bold magenta]>>> Auto-Recovery Attempt {attempt}/{max_attempts - 1} <<<[/bold magenta]\n")
-        
-        # Display the command using Rich Syntax Highlighting
-        syntax = Syntax(proposed_command, lexer_name, theme="monokai", line_numbers=False)
-        panel = Panel(syntax, title="Proposed Command", border_style="green")
-        console.print(panel)
-        console.print(f"[bold blue]Explanation:[/bold blue] {explanation}\n")
-        
-        # Handle execution modes
-        if dry_run:
-            console.print("[yellow]Dry-run mode active. Exiting without execution.[/yellow]")
+            display_recovery_heading(
+                console,
+                attempt,
+                max_attempts - 1,
+                active_settings,
+            )
+
+        with activity_status(
+            console,
+            ActivityState.REVIEWING,
+            active_settings,
+        ):
+            assessment = assess_command(proposed_command, Path.cwd())
+        if event_logger is not None:
+            event_logger.emit(
+                "risk_assessed",
+                risk_level=assessment.risk_level,
+                matched_policy_rules=assessment.matched_policy_rules,
+                requires_network=assessment.requires_network,
+                requires_privilege=assessment.requires_privilege,
+            )
+        display_proposal_review(
+            console,
+            response,
+            assessment,
+            env_info["shell"],
+            active_settings,
+        )
+        active_mode = PermissionMode.PLAN if dry_run else mode
+        decision = decide_permission(assessment, active_mode, force=force)
+
+        if decision.action is PermissionAction.PLAN_ONLY:
+            label = "Dry-run" if dry_run else "Plan"
+            console.print(
+                f"[yellow]{label} mode active. Exiting without execution.[/yellow]"
+            )
             return
-            
-        execute = force
-        if force:
-            console.print("[bold red]WARNING: --force flag used. Executing immediately.[/bold red]")
-        else:
-            # Confirmation Step
-            execute = questionary.confirm(
-                "Do you want to execute this command?",
-                qmark="ShellPa ",
-                style=ocean_theme,
-                default=False
-            ).ask()
-            
+
+        if decision.action is PermissionAction.BLOCK:
+            console.print(
+                "[bold red]Manual-only operation:[/bold red] "
+                f"{decision.reason}\n"
+                "[yellow]ShellPa will not execute this command. "
+                "If you still intend to run it, copy it and execute it directly "
+                "after independent review.[/yellow]"
+            )
+            return
+
+        execute = request_execution_permission(
+            decision.action,
+            assessment,
+            decision.confirmation_phrase,
+            force=force,
+            ux_settings=active_settings,
+        )
+
         if execute:
-            success, output_err = execute_command(proposed_command, env_info)
-            
-            if success:
-                console.print("[bold green]✓ Command succeeded![/bold green]")
+            request = ExecutionRequest(
+                command=proposed_command,
+                operating_system=env_info["os"],
+                shell=env_info["shell"],
+                working_directory=Path.cwd(),
+                timeout_seconds=timeout_seconds,
+                interactive=passthrough,
+                attempt=attempt + 1,
+            )
+            result = execute_command(
+                request,
+                observer=ExecutionActivity(console, active_settings),
+            )
+            if event_logger is not None:
+                event_logger.emit(
+                    "execution_completed",
+                    success=result.success,
+                    exit_code=result.exit_code,
+                    duration_ms=round(result.duration_seconds * 1000),
+                    timed_out=result.timed_out,
+                    cancelled=result.cancelled,
+                    output_truncated=result.output_truncated,
+                    partial_effect_possible=result.partial_effect_possible,
+                )
+
+            if result.success:
+                display_execution_result(console, result, active_settings)
                 return
-            else:
-                console.print(f"\n[bold red][!] COMMAND FAILED:[/bold red] {output_err}\n")
-                
-                if attempt < max_attempts - 1:
-                    recover = questionary.confirm(
-                        "Would you like me to try and fix this automatically?",
-                        qmark="ShellPa ",
-                        style=ocean_theme,
-                        default=True
-                    ).ask()
-                    
-                    if recover:
-                        is_recovery = True
-                        failed_cmd = proposed_command
-                        error_msg = output_err
-                        continue
-                    else:
-                        console.print("[yellow]Auto-recovery aborted by user.[/yellow]")
-                        return
-                else:
-                    console.print("[bold red]Max recovery attempts reached. Returning to terminal.[/bold red]")
-                    return
+
+            output_err = result_error_message(result)
+            display_execution_failure(
+                console,
+                result,
+                output_err,
+                active_settings,
+            )
+
+            if result.cancelled:
+                console.print(
+                    "[yellow]Recovery skipped because execution was cancelled.[/yellow]"
+                )
+                return
+            if result.timed_out:
+                timeout_label = (
+                    f"{timeout_seconds:g}-second"
+                    if timeout_seconds is not None
+                    else "configured"
+                )
+                console.print(
+                    f"[yellow]The command exceeded its {timeout_label} timeout.[/yellow]"
+                )
+            if result.output_truncated:
+                console.print(
+                    "[yellow]Diagnostic capture was truncated to its configured limit.[/yellow]"
+                )
+            if result.partial_effect_possible:
+                console.print(
+                    "[bold yellow]The failed command may have partially completed. "
+                    "Any correction must inspect the current state before retrying."
+                    "[/bold yellow]"
+                )
+
+            if attempt < max_attempts - 1:
+                recover = questionary.confirm(
+                    "Would you like me to try and fix this automatically?",
+                    qmark="ShellPa ",
+                    style=questionary_style(active_settings),
+                    default=True,
+                ).ask()
+
+                if recover:
+                    is_recovery = True
+                    recovery_context = build_recovery_context(query, request, result)
+                    continue
+                console.print("[yellow]Auto-recovery aborted by user.[/yellow]")
+                return
+
+            console.print(
+                "[bold red]Max recovery attempts reached. Returning to terminal.[/bold red]"
+            )
+            return
         else:
             console.print("[yellow]Execution cancelled by user.[/yellow]")
             return
 
+
+def _run_shellpa(
+    query: str | None,
+    *,
+    force: bool,
+    dry_run: bool,
+    mode: PermissionMode,
+    timeout_seconds: float | None,
+    passthrough: bool,
+) -> None:
+    config_status = load_config()
+    env_info = detect_environment()
+    ux_settings = load_ux_settings()
+    event_logger = SessionLogger()
+    event_logger.emit(
+        "session_start",
+        version=__version__,
+        provider=config_status.provider,
+        model=config_status.model_name,
+        os=env_info["os"],
+        shell=env_info["shell"],
+        mode=mode,
+    )
+
+    try:
+        if query is not None:
+            process_query(
+                query,
+                env_info,
+                force,
+                dry_run,
+                mode,
+                timeout_seconds,
+                passthrough,
+                ux_settings,
+                event_logger,
+            )
+            return
+
+        play_startup_reveal(
+            console,
+            ux_settings,
+            env_info,
+            config_status.model_name,
+        )
+        display_session_greeting(console, ux_settings)
+        run_first_time_onboarding(console, ux_settings)
+        state = InteractiveState(
+            mode=mode,
+            model_name=config_status.model_name,
+            env_info=env_info,
+            settings=ux_settings,
+        )
+
+        def process_interactive(user_input: str, active_mode: PermissionMode) -> None:
+            try:
+                process_query(
+                    user_input,
+                    env_info,
+                    force,
+                    dry_run,
+                    active_mode,
+                    timeout_seconds,
+                    passthrough,
+                    ux_settings,
+                    event_logger,
+                )
+            except typer.Exit:
+                pass
+
+        run_interactive_session(console, state, process_interactive)
+    finally:
+        event_logger.emit("session_end", outcome="closed")
+
+
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
-    query: Optional[str] = typer.Argument(None, help="The natural language task you want to perform, OR 'config' / 'about'."),
-    force: bool = typer.Option(False, "--force", "-f", help="Execute without asking for confirmation."),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Print the generated command without executing it.")
-):
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Skip approval only for known read-only or normal-risk commands.",
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Print the generated command without executing it."
+    ),
+    mode: PermissionMode = typer.Option(
+        PermissionMode.ASK,
+        "--mode",
+        help="Permission mode: ask, plan, or trusted.",
+        case_sensitive=False,
+    ),
+    timeout_seconds: float | None = typer.Option(
+        None,
+        "--timeout",
+        min=0.1,
+        help="Stop a command after this many seconds.",
+    ),
+    passthrough: bool = typer.Option(
+        False,
+        "--passthrough",
+        help="Attach interactive child commands directly to this terminal.",
+    ),
+) -> None:
     """
     Translate English into a shell command and execute it.
     If no query is provided, starts an interactive REPL session.
     """
-    if query == "config":
-        success = run_setup_wizard()
-        if success:
-            query = None
-        else:
-            raise typer.Exit()
-            
-    if query == "about":
-        console.print()
-        banner_text = pyfiglet.figlet_format("SHELLPA", font="slant")
-        
-        # Display an elegant About Box
-        about_text = (
-            f"[bold #00ccff]ShellPa v{__version__}[/bold #00ccff]\n\n"
-            "A modern, cross-platform AI CLI Agent translating English into native shell commands. \n"
-            "Built to make the terminal effortless."
-        )
-        panel = Panel(about_text, title="[bold white]About[/bold white]", border_style="#0055ff", expand=False)
-        
-        console.print(f"[bold #00ccff]{banner_text}[/bold #00ccff]")
-        console.print(panel)
-        console.print()
-        
-        choice = questionary.select(
-            "Visit our GitHub profiles:",
-            choices=[
-                questionary.Choice("</> AMR (AMR-M-ALSHAMEERI)", value="https://github.com/AMR-M-ALSHAMEERI"),
-                questionary.Choice("</> KHADIGA (doji0x0)", value="https://github.com/doji0x0"),
-                questionary.Choice("--> Launch ShellPa Interactive", value="launch"),
-                questionary.Choice("    Exit to Terminal", value="exit")
-            ],
-            style=ocean_theme
-        ).ask()
-        
-        if choice == "launch":
-            query = None  # clear the query so it falls through to the interactive REPL
-        elif choice and choice != "exit":
-            console.print(f"\n[bold cyan]Opening browser...[/bold cyan] [dim]{choice}[/dim]")
-            time.sleep(0.5)
-            webbrowser.open(choice)
-            raise typer.Exit()
-        else:
-            raise typer.Exit()
-            
-    load_config()
-    env_info = detect_environment()
+    ctx.ensure_object(dict)
+    ctx.obj.update(
+        {
+            "force": force,
+            "dry_run": dry_run,
+            "mode": mode,
+            "timeout_seconds": timeout_seconds,
+            "passthrough": passthrough,
+        }
+    )
+    if ctx.invoked_subcommand is None:
+        _run_shellpa(None, **ctx.obj)
 
-    # Onetime Execution
-    if query is not None:
-        process_query(query, env_info, force, dry_run)
-        return
 
-    # REPL Continuous Mode
-    play_startup_animation()
-    console.print("\n[dim]Type 'exit' or 'quit' to close the interactive session.[/dim]\n")
-    
-    while True:
-        try:
-            user_input = console.input("[bold green]ShellPa > [/bold green]").strip()
-            if not user_input:
-                continue
-            if user_input.lower() in ["exit", "quit"]:
-                console.print("[bold cyan]Goodbye![/bold cyan]")
-                break
-            
-            # Subprocess/Generate fail logic may throw typer.Exit - we catch it to preserve the Loop.
-            try:
-                process_query(user_input, env_info, force, dry_run)
-            except typer.Exit:
-                pass
-            
-            console.print() # Newline padding for the loop
-            
-        except (KeyboardInterrupt, EOFError):
-            console.print("\n[bold cyan]Goodbye![/bold cyan]")
-            break
+@app.command("run")
+def run_command(
+    ctx: typer.Context,
+    words: list[str] = typer.Argument(
+        None,
+        help="Natural-language request. The explicit form handles reserved words.",
+    ),
+    force: bool | None = typer.Option(
+        None,
+        "--force",
+        "-f",
+        help="Skip approval only for known read-only or normal-risk commands.",
+    ),
+    dry_run: bool | None = typer.Option(
+        None,
+        "--dry-run",
+        help="Print the generated command without executing it.",
+    ),
+    mode: PermissionMode | None = typer.Option(
+        None,
+        "--mode",
+        help="Permission mode: ask, plan, or trusted.",
+        case_sensitive=False,
+    ),
+    timeout_seconds: float | None = typer.Option(
+        None,
+        "--timeout",
+        min=0.1,
+        help="Stop a command after this many seconds.",
+    ),
+    passthrough: bool | None = typer.Option(
+        None,
+        "--passthrough",
+        help="Attach interactive child commands directly to this terminal.",
+    ),
+) -> None:
+    """Execute a natural-language request."""
+    root_options = dict(ctx.find_root().obj or {})
+    query_head = ctx.meta.get("shellpa_query_head")
+    query_parts = ([query_head] if query_head else []) + list(words or [])
+    query = " ".join(str(part) for part in query_parts).strip()
+    if not query:
+        raise typer.BadParameter("Provide a natural-language request.")
+    overrides = {
+        "force": force,
+        "dry_run": dry_run,
+        "mode": mode,
+        "timeout_seconds": timeout_seconds,
+        "passthrough": passthrough,
+    }
+    for key, value in overrides.items():
+        if value is not None:
+            root_options[key] = value
+    _run_shellpa(query, **root_options)
+
+
+@app.command("config")
+def config_command() -> None:
+    """Configure the provider, model, and credential."""
+    if not run_setup_wizard():
+        raise typer.Exit(code=1)
+
+
+@app.command("doctor")
+def doctor_command(
+    online: bool = typer.Option(
+        False,
+        "--online",
+        help="Check provider-host reachability without sending a model request.",
+    ),
+) -> None:
+    """Diagnose the local ShellPa environment without revealing secrets."""
+    report = run_doctor(online=online)
+    display_doctor(console, report)
+    if report.exit_code:
+        raise typer.Exit(code=report.exit_code)
+
+
+@app.command("about")
+def about_command(ctx: typer.Context) -> None:
+    """Show ShellPa identity, developers, and repository links."""
+    console.print()
+    action = run_about_menu(
+        console,
+        load_ux_settings(),
+        return_label="Launch ShellPa Interactive",
+    )
+    if action is AboutAction.RETURN:
+        root_options = dict(ctx.find_root().obj or {})
+        _run_shellpa(None, **root_options)
+
+
+@app.command("help")
+def help_command(ctx: typer.Context) -> None:
+    """Show ShellPa command help."""
+    parent = ctx.parent
+    if parent is not None:
+        console.print(parent.get_help())
+
+
+@app.command("version")
+def version_command() -> None:
+    """Show the installed ShellPa version."""
+    console.print(f"ShellPa {__version__}")
+
 
 if __name__ == "__main__":
     app()

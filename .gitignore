@@ -11,10 +11,21 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Test artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
 # IDEs
 .vscode/
 .idea/
 *.swp
+
+# Private planning and working documents
+.private/
 
 # Build artifacts
 build/

@@ -14,6 +14,8 @@ cd shellpa
 
 # Create the virtual environment
 python3 -m venv venv
+or
+py -m venv venv
 ```
 
 ### 2. Activate the Environment
@@ -58,6 +60,8 @@ shellpa
 ### Extra Commands:
 - Change your Model or Provider later:
   `shellpa config`
+- View developer info and explore their GitHub interactive profiles via `webbrowser`:
+  `shellpa about`
 - Try a dry-run to see the formatting without executing:
   `shellpa "list my desktop files" --dry-run`
 - Force execution without approval:
