@@ -8,6 +8,7 @@ def test_provider_and_shell_icons_have_unicode_defaults(
     monkeypatch.setattr(icons, "unicode_icons_supported", lambda: True)
 
     assert icons.provider_icon("openai") == "◉"
+    assert icons.provider_icon("codex") == "◉"
     assert icons.provider_icon("gemini") == "✦"
     assert icons.shell_icon("powershell") == "❯"
     assert icons.shell_icon("bash") == "$"
@@ -28,3 +29,4 @@ def test_model_icon_infers_provider(monkeypatch) -> None:
     assert icons.model_icon("gemini/gemini-2.0-flash") == "✦"
     assert icons.model_icon("claude-3-haiku") == "◆"
     assert icons.model_icon("openrouter/openai/gpt-4o") == "◇"
+    assert icons.model_icon("codex/default") == "◉"

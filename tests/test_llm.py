@@ -48,6 +48,7 @@ def test_generate_command_uses_configured_model_and_validates_response(
 
     monkeypatch.setattr(llm, "completion", fake_completion)
     monkeypatch.setenv("SHELLPA_MODEL", "test/provider-model")
+    monkeypatch.setenv("SHELLPA_PROVIDER", "openai")
 
     proposal = llm.generate_command(
         "show the date",
@@ -78,6 +79,7 @@ def test_generate_recovery_includes_failure_context(
         )
 
     monkeypatch.setattr(llm, "completion", fake_completion)
+    monkeypatch.setenv("SHELLPA_PROVIDER", "openai")
 
     proposal = llm.generate_recovery_command(
         RecoveryContext(
@@ -109,6 +111,38 @@ def test_request_command_rejects_empty_provider_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(llm, "completion", lambda **kwargs: fake_response(None))
+    monkeypatch.setenv("SHELLPA_PROVIDER", "openai")
 
     with pytest.raises(ValueError, match="empty command response"):
         llm.generate_command("list files", {"os": "Windows", "shell": "powershell"})
+
+
+def test_codex_provider_is_selected_without_calling_litellm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import shellpa.codex_provider as codex_provider
+
+    captured: dict[str, str] = {}
+
+    def request(system_prompt: str, user_prompt: str) -> CommandProposal:
+        captured["system"] = system_prompt
+        captured["user"] = user_prompt
+        return CommandProposal(command="pwd", explanation="Show the directory.")
+
+    monkeypatch.setenv("SHELLPA_PROVIDER", "codex")
+    monkeypatch.setattr(codex_provider, "request_codex_command", request)
+    monkeypatch.setattr(
+        llm,
+        "completion",
+        lambda **kwargs: pytest.fail("Codex provider called LiteLLM"),
+    )
+
+    proposal = llm.generate_command(
+        "where am I",
+        {"os": "Linux", "shell": "bash"},
+        "Project types: python",
+    )
+
+    assert proposal.command == "pwd"
+    assert captured["user"] == "where am I"
+    assert "Project types: python" in captured["system"]

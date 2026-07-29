@@ -29,6 +29,28 @@ def test_non_slash_input_is_not_consumed() -> None:
     assert repl.handle_slash_command("list files", state(), Console()) is False
 
 
+def test_codex_login_and_logout_slash_commands(monkeypatch) -> None:
+    calls: list[tuple[str, bool | None]] = []
+    monkeypatch.setattr(
+        repl,
+        "login_codex",
+        lambda console, device_code=False: calls.append(("login", device_code)),
+    )
+    monkeypatch.setattr(
+        repl,
+        "logout_codex",
+        lambda console: calls.append(("logout", None)),
+    )
+
+    assert repl.handle_slash_command(
+        "/login device-code",
+        state(),
+        Console(),
+    )
+    assert repl.handle_slash_command("/logout", state(), Console())
+    assert calls == [("login", True), ("logout", None)]
+
+
 def test_mode_command_changes_runtime_mode() -> None:
     runtime = state()
     assert repl.handle_slash_command("/mode trusted", runtime, Console()) is True

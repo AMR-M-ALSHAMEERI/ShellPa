@@ -1,11 +1,21 @@
 import os
 import re
-from typing import Any
+from typing import Any, Protocol
 
 from .models import CommandProposal, RecoveryContext
 
 # Backward-compatible name for code that imported the original response model.
 CommandResponse = CommandProposal
+
+
+class CommandProvider(Protocol):
+    """Provider-neutral boundary for structured command generation."""
+
+    def request_command(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> CommandProposal: ...
 
 
 def completion(**kwargs: Any) -> Any:
@@ -26,22 +36,42 @@ def parse_command_response(content: str) -> CommandProposal:
     return CommandProposal.model_validate_json(cleaned)
 
 
+class LiteLLMProvider:
+    """Adapter for the existing API-key-backed LiteLLM providers."""
+
+    def request_command(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> CommandProposal:
+        model = os.getenv("SHELLPA_MODEL", "openrouter/openai/gpt-3.5-turbo")
+        response = completion(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+        )
+
+        content = response.choices[0].message.content
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("The model returned an empty command response.")
+        return parse_command_response(content)
+
+
+def configured_command_provider() -> CommandProvider:
+    """Select the configured provider without importing optional SDKs eagerly."""
+    if os.getenv("SHELLPA_PROVIDER", "").strip().lower() == "codex":
+        from .codex_provider import CodexSubscriptionProvider
+
+        return CodexSubscriptionProvider()
+    return LiteLLMProvider()
+
+
 def _request_command(system_prompt: str, user_prompt: str) -> CommandProposal:
     """Call the configured model and validate its structured command proposal."""
-    model = os.getenv("SHELLPA_MODEL", "openrouter/openai/gpt-3.5-turbo")
-    response = completion(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        response_format={"type": "json_object"},
-    )
-
-    content = response.choices[0].message.content
-    if not isinstance(content, str) or not content.strip():
-        raise ValueError("The model returned an empty command response.")
-    return parse_command_response(content)
+    return configured_command_provider().request_command(system_prompt, user_prompt)
 
 
 def _workspace_prompt_section(workspace_summary: str | None) -> str:

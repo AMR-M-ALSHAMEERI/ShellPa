@@ -7,6 +7,7 @@ import sys
 
 PROVIDER_ICONS = {
     "openai": ("◉", "[OpenAI]"),
+    "codex": ("◉", "[Codex]"),
     "openrouter": ("◇", "[OpenRouter]"),
     "gemini": ("✦", "[Gemini]"),
     "anthropic": ("◆", "[Anthropic]"),
@@ -61,6 +62,8 @@ def provider_for_model(model_name: str | None) -> str | None:
     normalized = (model_name or "").lower()
     if normalized.startswith("openrouter/"):
         return "openrouter"
+    if normalized.startswith("codex/"):
+        return "codex"
     if normalized.startswith(("openai/", "gpt-", "o1", "o3", "o4")):
         return "openai"
     if normalized.startswith(("gemini/", "gemini-")):

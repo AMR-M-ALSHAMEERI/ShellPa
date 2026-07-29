@@ -73,6 +73,10 @@ def run_setup_wizard():
                     value="openai",
                 ),
                 questionary.Choice(
+                    f"{provider_icon('codex')} OpenAI Codex (ChatGPT subscription)",
+                    value="codex",
+                ),
+                questionary.Choice(
                     f"{provider_icon('gemini')} Google Gemini",
                     value="gemini",
                 ),
@@ -110,6 +114,13 @@ def run_setup_wizard():
                 ]
             elif provider == "openai":
                 model_choices = ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"]
+            elif provider == "codex":
+                model_choices = [
+                    questionary.Choice(
+                        "Use the Codex account default (Recommended)",
+                        value="codex/default",
+                    )
+                ]
             elif provider == "gemini":
                 model_choices = [
                     "gemini/gemini-1.5-pro",
@@ -151,8 +162,10 @@ def run_setup_wizard():
                     break
             break  # break model loop
 
-        # 3. Enter API Key
-        while True:
+        # 3. Enter an API key only for providers that require one.
+        api_key_name: str | None = None
+        api_key: str | None = None
+        while provider != "codex":
             api_key_name = ""
             if provider == "openrouter":
                 api_key_name = "OPENROUTER_API_KEY"
@@ -195,7 +208,8 @@ def run_setup_wizard():
     # Update config
     env_vars["SHELLPA_MODEL"] = model
     env_vars["SHELLPA_PROVIDER"] = provider
-    env_vars[api_key_name] = api_key
+    if api_key_name is not None and api_key is not None:
+        env_vars[api_key_name] = api_key
 
     with open(env_path, "w") as f:
         for k, v in env_vars.items():
@@ -204,7 +218,14 @@ def run_setup_wizard():
     # Load into current environment immediately
     os.environ["SHELLPA_MODEL"] = model
     os.environ["SHELLPA_PROVIDER"] = provider
-    os.environ[api_key_name] = api_key
+    if api_key_name is not None and api_key is not None:
+        os.environ[api_key_name] = api_key
 
     console.print("\n[bold green]Configuration saved successfully! ✨[/bold green]")
+    if provider == "codex":
+        console.print(
+            "[cyan]Install the embedded provider with "
+            'python -m pip install "shellpa[codex]", then run '
+            "shellpa login.[/cyan]"
+        )
     return True

@@ -20,6 +20,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+codex = [
+    "openai-codex==0.144.4",
+]
 dev = [
     "build>=1.2",
     "mypy>=1.13",

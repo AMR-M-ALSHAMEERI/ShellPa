@@ -14,6 +14,8 @@ def test_help_lists_public_commands() -> None:
     for command in (
         "run",
         "config",
+        "login",
+        "logout",
         "doctor",
         "context",
         "about",
@@ -84,6 +86,26 @@ def test_config_runs_wizard_without_starting_shell(monkeypatch) -> None:
     assert result.exit_code == 0
     wizard.assert_called_once_with()
     run_shellpa.assert_not_called()
+
+
+def test_login_forwards_device_code_choice(monkeypatch) -> None:
+    login = Mock(return_value=True)
+    monkeypatch.setattr(main, "login_codex", login)
+
+    result = runner.invoke(main.app, ["login", "--device-code"])
+
+    assert result.exit_code == 0
+    login.assert_called_once_with(main.console, device_code=True)
+
+
+def test_logout_uses_codex_managed_session(monkeypatch) -> None:
+    logout = Mock(return_value=True)
+    monkeypatch.setattr(main, "logout_codex", logout)
+
+    result = runner.invoke(main.app, ["logout"])
+
+    assert result.exit_code == 0
+    logout.assert_called_once_with(main.console)
 
 
 def test_doctor_runs_diagnostics_without_starting_shell(monkeypatch) -> None:

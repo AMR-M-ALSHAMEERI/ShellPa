@@ -17,6 +17,11 @@ from rich.console import Console
 from rich.table import Table
 
 from . import __version__
+from .codex_provider import (
+    CODEX_EXTRA_INSTALL,
+    CodexAccountState,
+    inspect_codex_account,
+)
 from .config import (
     ConfigStatus,
     inspect_config,
@@ -56,6 +61,7 @@ PROVIDER_HOSTS = {
     "openai": "https://api.openai.com",
     "gemini": "https://generativelanguage.googleapis.com",
     "anthropic": "https://api.anthropic.com",
+    "codex": "https://chatgpt.com",
 }
 
 REQUIRED_MODULES = (
@@ -96,6 +102,20 @@ def _writable_parent(path: Path) -> bool:
 
 def _configuration_checks(status: ConfigStatus) -> list[DiagnosticCheck]:
     provider_detail = status.provider or "custom or unknown provider"
+    if status.provider == "codex":
+        credential_check = DiagnosticCheck(
+            "Credential",
+            CheckLevel.PASS,
+            "Managed by the official Codex SDK; value unavailable to ShellPa.",
+        )
+    else:
+        credential_check = _check(
+            "Credential",
+            status.api_key_configured,
+            f"{status.api_key_name or 'provider credential'} is present (value hidden)",
+            f"{status.api_key_name or 'provider credential'} is missing or empty.",
+            remedy="Run: shellpa config",
+        )
     return [
         _check(
             "Model",
@@ -112,14 +132,60 @@ def _configuration_checks(status: ConfigStatus) -> list[DiagnosticCheck]:
             fail_level=CheckLevel.WARN,
             remedy="Save a supported provider with: shellpa config",
         ),
-        _check(
-            "Credential",
-            status.api_key_configured,
-            f"{status.api_key_name or 'provider credential'} is present (value hidden)",
-            f"{status.api_key_name or 'provider credential'} is missing or empty.",
-            remedy="Run: shellpa config",
-        ),
+        credential_check,
     ]
+
+
+def _codex_checks() -> list[DiagnosticCheck]:
+    status = inspect_codex_account()
+    if status.state is CodexAccountState.UNAVAILABLE:
+        return [
+            DiagnosticCheck(
+                "Codex SDK",
+                CheckLevel.FAIL,
+                "The optional embedded Codex runtime is not installed.",
+                f"Run: {CODEX_EXTRA_INSTALL}",
+            )
+        ]
+
+    checks = [
+        DiagnosticCheck(
+            "Codex SDK",
+            CheckLevel.PASS,
+            "The embedded Codex SDK and pinned runtime are importable.",
+        )
+    ]
+    if status.state is CodexAccountState.CHATGPT:
+        plan = f" ({status.plan_type})" if status.plan_type else ""
+        checks.append(
+            DiagnosticCheck(
+                "Codex account",
+                CheckLevel.PASS,
+                f"ChatGPT account connected{plan}; identity hidden.",
+            )
+        )
+    elif status.state in {
+        CodexAccountState.SIGNED_OUT,
+        CodexAccountState.OTHER,
+    }:
+        checks.append(
+            DiagnosticCheck(
+                "Codex account",
+                CheckLevel.FAIL,
+                status.detail,
+                "Run: shellpa login",
+            )
+        )
+    else:
+        checks.append(
+            DiagnosticCheck(
+                "Codex account",
+                CheckLevel.FAIL,
+                status.detail,
+                "Check the Codex runtime, then run: shellpa login",
+            )
+        )
+    return checks
 
 
 def _online_check(
@@ -217,6 +283,7 @@ def run_doctor(
             remedy="Use a supported shell or correct PATH.",
         ),
         *_configuration_checks(status),
+        *(_codex_checks() if status.provider == "codex" else []),
         _check(
             "Git",
             bool(shutil.which("git")),

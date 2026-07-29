@@ -15,6 +15,7 @@ from .activity import (
     run_first_time_onboarding,
     select_standard_approval,
 )
+from .codex_auth import login_codex, logout_codex
 from .config import load_config
 from .diagnostics import display_doctor, run_doctor
 from .event_log import SessionLogger
@@ -513,6 +514,26 @@ def run_command(
 def config_command() -> None:
     """Configure the provider, model, and credential."""
     if not run_setup_wizard():
+        raise typer.Exit(code=1)
+
+
+@app.command("login")
+def login_command(
+    device_code: bool = typer.Option(
+        False,
+        "--device-code",
+        help="Use a one-time device code instead of the browser callback.",
+    ),
+) -> None:
+    """Connect ShellPa's Codex provider to a ChatGPT account."""
+    if not login_codex(console, device_code=device_code):
+        raise typer.Exit(code=1)
+
+
+@app.command("logout")
+def logout_command() -> None:
+    """Sign the embedded Codex provider out of ChatGPT."""
+    if not logout_codex(console):
         raise typer.Exit(code=1)
 
 

@@ -15,6 +15,7 @@ PROVIDER_API_KEYS = {
     "gemini": "GEMINI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
 }
+SUPPORTED_PROVIDERS = frozenset((*PROVIDER_API_KEYS, "codex"))
 
 
 class ConfigStatus(BaseModel):
@@ -28,7 +29,8 @@ class ConfigStatus(BaseModel):
 
     @property
     def is_configured(self) -> bool:
-        return self.model_configured and self.api_key_configured
+        credential_ready = self.api_key_configured or self.provider == "codex"
+        return self.model_configured and credential_ready
 
 
 def infer_provider(
@@ -37,12 +39,14 @@ def infer_provider(
     """Infer a supported provider while preferring an explicit saved choice."""
     if explicit_provider:
         normalized_provider = explicit_provider.strip().lower()
-        if normalized_provider in PROVIDER_API_KEYS:
+        if normalized_provider in SUPPORTED_PROVIDERS:
             return normalized_provider
 
     normalized_model = (model_name or "").strip().lower()
     if normalized_model.startswith("openrouter/"):
         return "openrouter"
+    if normalized_model.startswith("codex/"):
+        return "codex"
     if normalized_model.startswith(("gemini/", "gemini-")):
         return "gemini"
     if normalized_model.startswith(("anthropic/", "claude-")):

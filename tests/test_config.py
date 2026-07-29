@@ -14,6 +14,7 @@ import shellpa.config as config
         ("gemini/gemini-1.5-pro", "gemini"),
         ("claude-3-haiku-20240307", "anthropic"),
         ("anthropic/claude-3", "anthropic"),
+        ("codex/default", "codex"),
         ("ollama/mistral", None),
     ],
 )
@@ -59,6 +60,20 @@ def test_inspect_config_accepts_nonempty_matching_key() -> None:
     )
 
     assert status.provider == "gemini"
+    assert status.is_configured is True
+
+
+def test_codex_configuration_never_requires_an_api_key() -> None:
+    status = config.inspect_config(
+        {
+            "SHELLPA_MODEL": "codex/default",
+            "SHELLPA_PROVIDER": "codex",
+        }
+    )
+
+    assert status.provider == "codex"
+    assert status.api_key_name is None
+    assert status.api_key_configured is False
     assert status.is_configured is True
 
 

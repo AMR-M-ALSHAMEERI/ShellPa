@@ -5,6 +5,7 @@ from pathlib import Path
 from rich.console import Console
 
 import shellpa.diagnostics as diagnostics
+from shellpa.codex_provider import CodexAccountState, CodexAccountStatus
 
 
 def configured_environment() -> dict[str, str]:
@@ -117,3 +118,28 @@ def test_doctor_display_has_pass_warn_fail_labels() -> None:
     assert "WARN" in rendered
     assert "FAIL" in rendered
     assert "repair it" in rendered
+
+
+def test_doctor_reports_codex_sdk_and_chatgpt_status_without_identity(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        diagnostics,
+        "inspect_codex_account",
+        lambda: CodexAccountStatus(
+            CodexAccountState.CHATGPT,
+            plan_type="plus",
+            detail="private@example.com",
+        ),
+    )
+    report = diagnostics.run_doctor(
+        environ={
+            "SHELLPA_PROVIDER": "codex",
+            "SHELLPA_MODEL": "codex/default",
+        }
+    )
+    combined = " ".join(check.detail for check in report.checks)
+
+    assert "embedded Codex SDK" in combined
+    assert "ChatGPT account connected (plus)" in combined
+    assert "private@example.com" not in combined
