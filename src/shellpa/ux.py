@@ -221,8 +221,10 @@ def _skip_requested() -> bool:
         try:
             import msvcrt
 
-            if msvcrt.kbhit():
-                msvcrt.getwch()
+            key_available = getattr(msvcrt, "kbhit")  # noqa: B009
+            read_key = getattr(msvcrt, "getwch")  # noqa: B009
+            if key_available():
+                read_key()
                 return True
         except (ImportError, OSError):
             return False

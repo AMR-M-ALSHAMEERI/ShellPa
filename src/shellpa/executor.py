@@ -83,7 +83,11 @@ def _subprocess_environment(request: ExecutionRequest) -> dict[str, str]:
 
 def _process_group_options() -> dict:
     if os.name == "nt":
-        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        creation_flag = getattr(  # noqa: B009
+            subprocess,
+            "CREATE_NEW_PROCESS_GROUP",
+        )
+        return {"creationflags": creation_flag}
     return {"start_new_session": True}
 
 
