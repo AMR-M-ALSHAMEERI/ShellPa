@@ -43,6 +43,8 @@ from .ux import (
     play_startup_reveal,
     questionary_style,
 )
+from .workspace import detect_workspace
+from .workspace_ui import display_workspace_context, display_workspace_identity
 
 
 class NaturalLanguageGroup(TyperGroup):
@@ -351,12 +353,15 @@ def _run_shellpa(
             config_status.model_name,
         )
         display_session_greeting(console, ux_settings)
+        workspace_context = detect_workspace()
+        display_workspace_identity(console, workspace_context)
         run_first_time_onboarding(console, ux_settings)
         state = InteractiveState(
             mode=mode,
             model_name=config_status.model_name,
             env_info=env_info,
             settings=ux_settings,
+            workspace=workspace_context,
         )
 
         def process_interactive(user_input: str, active_mode: PermissionMode) -> None:
@@ -374,6 +379,13 @@ def _run_shellpa(
                 )
             except typer.Exit:
                 pass
+            finally:
+                try:
+                    state.workspace = detect_workspace()
+                except OSError:
+                    # Keep the last valid identity if a command removed or made
+                    # the active working directory temporarily unavailable.
+                    pass
 
         run_interactive_session(console, state, process_interactive)
     finally:
@@ -504,6 +516,12 @@ def doctor_command(
     display_doctor(console, report)
     if report.exit_code:
         raise typer.Exit(code=report.exit_code)
+
+
+@app.command("context")
+def context_command() -> None:
+    """Show detected workspace facts and the provider-safe summary."""
+    display_workspace_context(console, detect_workspace())
 
 
 @app.command("about")

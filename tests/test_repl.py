@@ -6,7 +6,13 @@ from prompt_toolkit.output import DummyOutput
 from rich.console import Console
 
 import shellpa.repl as repl
-from shellpa.models import PermissionMode
+from shellpa.models import (
+    GitContext,
+    PermissionMode,
+    ProjectType,
+    WorkspaceBoundarySource,
+    WorkspaceContext,
+)
 from shellpa.ux import UXSettings
 
 
@@ -160,6 +166,28 @@ def test_about_slash_command_uses_shared_about_renderer(
     assert calls == [(runtime.settings, "Return to ShellPa")]
 
 
+def test_context_slash_command_refreshes_and_displays_workspace(
+    monkeypatch,
+) -> None:
+    runtime = state()
+    refreshed = WorkspaceContext(
+        root=".",
+        current_directory=".",
+        boundary_source=WorkspaceBoundarySource.CURRENT_DIRECTORY,
+    )
+    displayed = []
+    monkeypatch.setattr(repl, "detect_workspace", lambda: refreshed)
+    monkeypatch.setattr(
+        repl,
+        "display_workspace_context",
+        lambda console, context: displayed.append(context),
+    )
+
+    assert repl.handle_slash_command("/context", runtime, Console()) is True
+    assert runtime.workspace is refreshed
+    assert displayed == [refreshed]
+
+
 def test_history_is_session_local() -> None:
     first = state()
     second = state()
@@ -175,7 +203,6 @@ def test_footer_collapses_model_and_full_path_in_narrow_terminal(
     monkeypatch.setattr(
         repl.shutil, "get_terminal_size", lambda fallback: terminal_size((50, 24))
     )
-    monkeypatch.setattr(footer, "_git_status", lambda: "main*")
 
     rendered = str(footer())
 
@@ -183,6 +210,35 @@ def test_footer_collapses_model_and_full_path_in_narrow_terminal(
     assert "powershell" in rendered
     assert "old-model" not in rendered
     assert "main*" not in rendered
+
+
+def test_footer_uses_bounded_workspace_identity(
+    monkeypatch,
+) -> None:
+    runtime = state()
+    runtime.workspace = WorkspaceContext(
+        root=".",
+        current_directory=".",
+        boundary_source=WorkspaceBoundarySource.GIT,
+        project_types=[ProjectType.PYTHON],
+        git=GitContext(
+            is_repository=True,
+            branch="main",
+            has_tracked_changes=True,
+            tracked_change_count=2,
+        ),
+    )
+    footer = repl.StatusFooter(runtime)
+    monkeypatch.setattr(
+        repl.shutil,
+        "get_terminal_size",
+        lambda fallback: terminal_size((90, 24)),
+    )
+
+    rendered = str(footer())
+
+    assert "Python" in rendered
+    assert "Git main* (2)" in rendered
 
 
 def test_theme_selector_content_changes_palette_with_selection() -> None:

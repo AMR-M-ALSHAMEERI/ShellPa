@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import sys
 import time
 from collections.abc import Callable
@@ -26,7 +25,7 @@ from rich.table import Table
 from .about import run_about_menu
 from .diagnostics import display_doctor, run_doctor
 from .icons import model_icon, shell_icon, ui_icon, unicode_icons_supported
-from .models import PermissionMode
+from .models import PermissionMode, WorkspaceContext
 from .setup import run_setup_wizard
 from .ux import (
     THEMES,
@@ -35,6 +34,8 @@ from .ux import (
     prompt_style,
     save_ux_settings,
 )
+from .workspace import detect_workspace
+from .workspace_ui import display_workspace_context, format_workspace_identity
 
 SLASH_COMMANDS = (
     "/help",
@@ -45,6 +46,7 @@ SLASH_COMMANDS = (
     "/motion",
     "/animation",
     "/doctor",
+    "/context",
     "/about",
     "/clear",
     "/history",
@@ -112,6 +114,7 @@ class InteractiveState:
     model_name: str | None
     env_info: dict
     settings: UXSettings
+    workspace: WorkspaceContext | None = None
     requests: list[str] = field(default_factory=list)
     should_exit: bool = False
 
@@ -119,40 +122,6 @@ class InteractiveState:
 class StatusFooter:
     def __init__(self, state: InteractiveState):
         self.state = state
-        self._last_git_check = 0.0
-        self._git_label = ""
-
-    def _git_status(self) -> str:
-        now = time.monotonic()
-        if now - self._last_git_check < 1.0:
-            return self._git_label
-        self._last_git_check = now
-        try:
-            branch = subprocess.run(
-                ["git", "branch", "--show-current"],
-                cwd=Path.cwd(),
-                capture_output=True,
-                text=True,
-                timeout=0.3,
-                check=False,
-            ).stdout.strip()
-            if not branch:
-                self._git_label = ""
-                return ""
-            dirty = bool(
-                subprocess.run(
-                    ["git", "status", "--porcelain"],
-                    cwd=Path.cwd(),
-                    capture_output=True,
-                    text=True,
-                    timeout=0.3,
-                    check=False,
-                ).stdout.strip()
-            )
-            self._git_label = f"{branch}{'*' if dirty else ''}"
-        except (OSError, subprocess.SubprocessError):
-            self._git_label = ""
-        return self._git_label
 
     def __call__(self) -> HTML:
         width = shutil.get_terminal_size((100, 24)).columns
@@ -164,9 +133,8 @@ class StatusFooter:
             )
         shell = self.state.env_info.get("shell", "unknown")
         parts.append(f"{shell_icon(shell)} {shell}")
-        git_label = self._git_status()
-        if git_label and width >= 60:
-            parts.append(git_label)
+        if self.state.workspace is not None and width >= 60:
+            parts.append(format_workspace_identity(self.state.workspace))
         current_directory = Path.cwd()
         parts.append(str(current_directory) if width >= 100 else current_directory.name)
         return HTML(f"  {escape('  |  '.join(parts))}  ")
@@ -194,6 +162,7 @@ def _show_help(console: Console) -> None:
         ("/theme [ocean|aurora|minimal|contrast|ansi]", "Preview or change theme"),
         ("/motion [full|compact|off]", "Change startup animation"),
         ("/doctor", "Run local configuration and environment checks"),
+        ("/context", "Inspect workspace facts and provider-safe context"),
         ("/about", "Show ShellPa identity and version"),
         ("/clear or Ctrl+L", "Clear visible output"),
         ("/history", "Show requests from this session"),
@@ -640,6 +609,9 @@ def handle_slash_command(
             console.print("[yellow]Use: /motion full, compact, or off[/yellow]")
     elif command == "/doctor":
         _show_doctor(console, state)
+    elif command == "/context":
+        state.workspace = detect_workspace()
+        display_workspace_context(console, state.workspace)
     elif command == "/about":
         run_about_menu(
             console,

@@ -11,7 +11,15 @@ def test_help_lists_public_commands() -> None:
     result = runner.invoke(main.app, ["--help"])
 
     assert result.exit_code == 0
-    for command in ("run", "config", "doctor", "about", "help", "version"):
+    for command in (
+        "run",
+        "config",
+        "doctor",
+        "context",
+        "about",
+        "help",
+        "version",
+    ):
         assert command in result.stdout
 
 
@@ -105,6 +113,27 @@ def test_doctor_online_is_forwarded(monkeypatch) -> None:
 
     assert result.exit_code == 0
     run_doctor.assert_called_once_with(online=True)
+
+
+def test_context_is_offline_and_does_not_start_provider(monkeypatch) -> None:
+    context = Mock()
+    detect_workspace = Mock(return_value=context)
+    display_workspace_context = Mock()
+    run_shellpa = Mock()
+    monkeypatch.setattr(main, "detect_workspace", detect_workspace)
+    monkeypatch.setattr(
+        main,
+        "display_workspace_context",
+        display_workspace_context,
+    )
+    monkeypatch.setattr(main, "_run_shellpa", run_shellpa)
+
+    result = runner.invoke(main.app, ["context"])
+
+    assert result.exit_code == 0
+    detect_workspace.assert_called_once_with()
+    display_workspace_context.assert_called_once_with(main.console, context)
+    run_shellpa.assert_not_called()
 
 
 def test_about_stays_in_hub_until_user_leaves(monkeypatch) -> None:
