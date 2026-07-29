@@ -43,6 +43,26 @@ class PermissionAction(str, Enum):
     BLOCK = "block"
 
 
+class WorkspaceBoundarySource(str, Enum):
+    """The evidence used to choose a workspace boundary."""
+
+    GIT = "git"
+    PROJECT_MARKER = "project_marker"
+    CURRENT_DIRECTORY = "current_directory"
+
+
+class ProjectType(str, Enum):
+    """Project ecosystems recognizable from metadata marker names."""
+
+    PYTHON = "python"
+    NODE = "node"
+    DOCKER = "docker"
+    RUST = "rust"
+    GO = "go"
+    MAVEN = "maven"
+    GRADLE = "gradle"
+
+
 class PermissionDecision(BaseModel):
     """A mode-aware authorization decision for one assessed command."""
 
@@ -123,3 +143,15 @@ class RecoveryContext(BaseModel):
     cancelled: bool = False
     output_truncated: bool = False
     partial_effect_possible: bool = True
+
+
+class WorkspaceContext(BaseModel):
+    """Bounded, read-only metadata describing the active workspace."""
+
+    root: Path
+    current_directory: Path
+    boundary_source: WorkspaceBoundarySource
+    project_types: list[ProjectType] = Field(default_factory=list)
+    markers: list[str] = Field(default_factory=list)
+    available_tools: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
