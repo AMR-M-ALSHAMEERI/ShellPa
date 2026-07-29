@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/AMR-M-ALSHAMEERI/ShellPa/actions/workflows/ci.yml"><img src="https://github.com/AMR-M-ALSHAMEERI/ShellPa/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-0.3.0-14b8e6" alt="Version 0.3.0">
+  <a href="https://pypi.org/project/shellpa/"><img src="https://img.shields.io/pypi/v/shellpa?color=14b8e6" alt="PyPI version"></a>
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776ab?logo=python&logoColor=white" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-071a3d" alt="Windows, Linux, and macOS">
   <a href="https://github.com/AMR-M-ALSHAMEERI/ShellPa/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-C9A24E" alt="MIT License"></a>
@@ -216,6 +216,6 @@ ShellPa is available under the
 
 ## Release status
 
-Version 0.3.0 passed its TestPyPI publication and clean-install rehearsal.
-Production PyPI publication is handled through the protected release workflow
-rather than normal CI.
+Version 0.3.0 is available on [PyPI](https://pypi.org/project/shellpa/0.3.0/).
+It was published through the protected Trusted Publishing workflow after
+TestPyPI and clean-install validation.
