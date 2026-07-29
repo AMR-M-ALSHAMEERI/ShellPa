@@ -52,3 +52,6 @@ jobs:
 
       - name: Build package
         run: python -m build
+
+      - name: Verify package contents
+        run: python scripts/verify_package_contents.py dist

@@ -254,6 +254,65 @@ def test_git_context_reports_branch_and_change_counts(tmp_path: Path) -> None:
     assert str(tmp_path.resolve()) not in summary
 
 
+def test_git_context_reports_unborn_empty_repository(tmp_path: Path) -> None:
+    if workspace.shutil.which("git") is None:
+        pytest.skip("Git is unavailable.")
+
+    run_git(tmp_path, "init", "--quiet")
+
+    context, warning = detect_git_context(tmp_path, git_available=True)
+
+    assert warning is None
+    assert context.is_repository is True
+    assert context.branch
+    assert context.head_state is GitHeadState.UNBORN
+    assert context.tracked_change_count == 0
+    assert context.untracked_file_count == 0
+
+
+def test_git_context_reports_detached_head(tmp_path: Path) -> None:
+    if workspace.shutil.which("git") is None:
+        pytest.skip("Git is unavailable.")
+
+    run_git(tmp_path, "init", "--quiet")
+    run_git(tmp_path, "config", "user.email", "shellpa@example.invalid")
+    run_git(tmp_path, "config", "user.name", "ShellPa Tests")
+    touch(tmp_path / "tracked.txt")
+    run_git(tmp_path, "add", "tracked.txt")
+    run_git(tmp_path, "commit", "--quiet", "-m", "initial")
+    run_git(tmp_path, "checkout", "--quiet", "--detach", "HEAD")
+
+    context, warning = detect_git_context(tmp_path, git_available=True)
+
+    assert warning is None
+    assert context.is_repository is True
+    assert context.branch is None
+    assert context.head_state is GitHeadState.DETACHED
+
+
+def test_workspace_handles_spaces_and_unicode_in_paths(tmp_path: Path) -> None:
+    project = tmp_path / "Shell Pa café" / "nested directory"
+    project.mkdir(parents=True)
+    touch(project.parent / "pyproject.toml")
+
+    context = detect_workspace(project)
+    summary = format_provider_workspace_summary(context)
+
+    assert context.root == project.parent.resolve()
+    assert context.current_directory == project.resolve()
+    assert context.project_types == [ProjectType.PYTHON]
+    assert str(project) not in summary
+    assert "café" not in summary
+
+
+def test_git_context_handles_non_repository_directory(tmp_path: Path) -> None:
+    context, warning = detect_git_context(tmp_path, git_available=True)
+
+    assert warning is None
+    assert context.is_repository is False
+    assert context.head_state is GitHeadState.UNKNOWN
+
+
 def test_git_context_degrades_when_git_is_missing(tmp_path: Path) -> None:
     context, warning = detect_git_context(tmp_path, git_available=False)
 

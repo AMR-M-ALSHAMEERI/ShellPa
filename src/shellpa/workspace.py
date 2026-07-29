@@ -278,7 +278,12 @@ def detect_git_context(
         )
         if branch_result.returncode == 0 and branch_result.stdout.strip():
             branch = branch_result.stdout.strip()
-            head_state = GitHeadState.BRANCH
+            head_result = _run_small_git_command(root, "rev-parse", "--verify", "HEAD")
+            head_state = (
+                GitHeadState.BRANCH
+                if head_result.returncode == 0
+                else GitHeadState.UNBORN
+            )
         else:
             branch = None
             head_result = _run_small_git_command(root, "rev-parse", "--verify", "HEAD")
