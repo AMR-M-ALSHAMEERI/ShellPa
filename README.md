@@ -216,6 +216,6 @@ ShellPa is available under the
 
 ## Release status
 
-Version 0.3.0 is the first public-release candidate. Public PyPI publication,
-repository visibility, and release authorization are handled through the
-controlled release process rather than from the normal CI workflow.
+Version 0.3.0 passed its TestPyPI publication and clean-install rehearsal.
+Production PyPI publication is handled through the protected release workflow
+rather than normal CI.

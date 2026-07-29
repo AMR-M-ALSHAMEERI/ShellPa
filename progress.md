@@ -7,7 +7,7 @@
 - Repository: public
 - Supported Python: 3.10 and newer
 - Supported systems: Windows, Linux, and macOS
-- Public PyPI distribution: not published
+- Distribution: TestPyPI rehearsal passed; production PyPI not yet published
 
 ## Product direction
 
@@ -161,7 +161,9 @@ Completed public-release preparation:
    identity assets;
 4. added a manually triggered Trusted Publishing workflow;
 5. validated the wheel, source archive, PyPI description, and clean
-   installation.
+   installation;
+6. published version 0.3.0 to TestPyPI through Trusted Publishing and
+   installed the exact hosted wheel successfully.
 
-Remaining owner-controlled gates are PyPI/TestPyPI Trusted Publisher
-configuration, TestPyPI acceptance, and final PyPI publication.
+Remaining owner-controlled gates are production PyPI account setup, Trusted
+Publisher configuration, release-tag authorization, and final publication.
