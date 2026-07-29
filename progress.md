@@ -4,7 +4,7 @@
 
 - Version: `0.3.0`
 - Status: public release candidate
-- Repository: private pending the final public-release gate
+- Repository: public
 - Supported Python: 3.10 and newer
 - Supported systems: Windows, Linux, and macOS
 - Public PyPI distribution: not published
@@ -163,6 +163,5 @@ Completed public-release preparation:
 5. validated the wheel, source archive, PyPI description, and clean
    installation.
 
-Remaining owner-controlled gates are repository visibility, PyPI/TestPyPI
-Trusted Publisher configuration, TestPyPI acceptance, and final PyPI
-publication.
+Remaining owner-controlled gates are PyPI/TestPyPI Trusted Publisher
+configuration, TestPyPI acceptance, and final PyPI publication.

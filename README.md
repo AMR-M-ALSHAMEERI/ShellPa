@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/shellpa-mark.png" alt="ShellPa command-line logo" width="340">
+  <img src="https://raw.githubusercontent.com/AMR-M-ALSHAMEERI/ShellPa/main/docs/assets/shellpa-mark.png" alt="ShellPa command-line logo" width="340">
 </p>
 
 <h1 align="center">ShellPa</h1>
@@ -14,7 +14,7 @@
   <img src="https://img.shields.io/badge/version-0.3.0-14b8e6" alt="Version 0.3.0">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776ab?logo=python&logoColor=white" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-071a3d" alt="Windows, Linux, and macOS">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-C9A24E" alt="MIT License"></a>
+  <a href="https://github.com/AMR-M-ALSHAMEERI/ShellPa/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-C9A24E" alt="MIT License"></a>
 </p>
 
 ShellPa translates natural-language intent into a command for the active
@@ -211,7 +211,8 @@ not through a public issue.
 
 ## License
 
-ShellPa is available under the [MIT License](LICENSE).
+ShellPa is available under the
+[MIT License](https://github.com/AMR-M-ALSHAMEERI/ShellPa/blob/main/LICENSE).
 
 ## Release status
 
