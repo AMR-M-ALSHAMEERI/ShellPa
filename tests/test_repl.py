@@ -335,6 +335,12 @@ def test_idle_prompt_animates_only_while_input_is_empty(monkeypatch) -> None:
     assert typing_text.startswith(">_")
 
 
+def test_prompt_color_breath_is_bounded() -> None:
+    assert repl._blend_hex_color("#000000", "#ffffff", 0.5) == "#808080"
+    assert repl._blend_hex_color("#123456", "#abcdef", -1.0) == "#123456"
+    assert repl._blend_hex_color("#123456", "#abcdef", 2.0) == "#abcdef"
+
+
 def test_interactive_session_accepts_legacy_exit_word(
     monkeypatch,
 ) -> None:

@@ -27,6 +27,7 @@ from .icons import model_icon, shell_icon, ui_icon, unicode_icons_supported
 from .identity import (
     MICRO_MARK,
     input_caret_frame,
+    prompt_breath_level,
     prompt_mark_frame,
     signal_sweep_active,
 )
@@ -232,10 +233,19 @@ def _idle_prompt(settings: UXSettings) -> Callable[[], FormattedText]:
             motion_enabled=motion_enabled,
             unicode=unicode_icons_supported(),
         )
+        signal_active = signal_sweep_active(
+            elapsed,
+            motion_enabled=motion_enabled,
+        )
+        breath_level = prompt_breath_level(
+            elapsed,
+            has_input=has_text,
+            motion_enabled=motion_enabled,
+        )
         mark_color = (
             theme.accent
-            if signal_sweep_active(elapsed, motion_enabled=motion_enabled)
-            else theme.identity
+            if signal_active
+            else _blend_hex_color(theme.identity, theme.accent, breath_level * 0.55)
         )
         return FormattedText(
             [
@@ -243,13 +253,25 @@ def _idle_prompt(settings: UXSettings) -> Callable[[], FormattedText]:
                 (f"fg:{mark_color} bold", mark[1:]),
                 (f"fg:{theme.identity} bold", " ShellPa"),
                 (
-                    f"fg:{theme.identity if signal_sweep_active(elapsed, motion_enabled=motion_enabled) else theme.accent} bold",
+                    f"fg:{theme.identity if signal_active else theme.accent} bold",
                     f" {caret} ",
                 ),
             ]
         )
 
     return render
+
+
+def _blend_hex_color(start: str, end: str, amount: float) -> str:
+    """Blend two theme colors without changing prompt layout or terminal state."""
+    bounded = max(0.0, min(1.0, amount))
+    start_channels = tuple(int(start[index : index + 2], 16) for index in (1, 3, 5))
+    end_channels = tuple(int(end[index : index + 2], 16) for index in (1, 3, 5))
+    blended = tuple(
+        round(source + (target - source) * bounded)
+        for source, target in zip(start_channels, end_channels, strict=True)
+    )
+    return "#" + "".join(f"{channel:02x}" for channel in blended)
 
 
 def _theme_selector_content(
