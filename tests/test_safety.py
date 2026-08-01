@@ -93,6 +93,31 @@ def test_high_risk_commands_require_typed_confirmation(
 @pytest.mark.parametrize(
     "command",
     [
+        "Get-Content .env",
+        "cat ~/.shellpa.env",
+    ],
+)
+def test_sensitive_credential_files_require_typed_confirmation(
+    command: str,
+    workspace: Path,
+) -> None:
+    assessment = assess_command(command, workspace)
+
+    assert assessment.risk_level is RiskLevel.HIGH
+    assert assessment.required_confirmation is ConfirmationRequirement.TYPED
+    assert "high.sensitive-file-access" in assessment.matched_policy_rules
+
+
+def test_env_example_remains_read_only(workspace: Path) -> None:
+    assessment = assess_command("Get-Content .env.example", workspace)
+
+    assert assessment.risk_level is RiskLevel.READ_ONLY
+    assert assessment.matched_policy_rules == ["readonly.known-command"]
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
         "Remove-Item -Recurse .",
         "Remove-Item -Recurse C:\\",
         "Remove-Item -Recurse C:\\*",

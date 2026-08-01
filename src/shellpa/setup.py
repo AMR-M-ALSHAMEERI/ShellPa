@@ -1,10 +1,14 @@
 import os
+import re
+import stat
 import sys
+import tempfile
 from pathlib import Path
 from typing import Literal
 
 import pyfiglet
 import questionary
+from dotenv import dotenv_values
 from rich.console import Console
 
 from . import __version__
@@ -14,6 +18,12 @@ from .codex_install import (
     install_codex_sdk,
 )
 from .codex_provider import codex_sdk_installed
+from .credentials import (
+    PROVIDER_API_KEYS,
+    CredentialStore,
+    CredentialStoreError,
+    set_session_credential,
+)
 from .icons import provider_icon
 
 console = Console()
@@ -111,7 +121,282 @@ def _offer_codex_login() -> None:
     login_codex_interactively(console, device_code=None)
 
 
-def run_setup_wizard():
+ASSIGNMENT_PATTERN = re.compile(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=")
+
+
+def _safe_config_value(value: str) -> str:
+    normalized = value.strip()
+    if not normalized or "\n" in normalized or "\r" in normalized:
+        raise ValueError("Configuration values must be non-empty single lines.")
+    return normalized
+
+
+def _update_config_file(
+    path: Path,
+    updates: dict[str, str],
+    *,
+    remove: set[str] | None = None,
+) -> None:
+    """Update named metadata while preserving unrelated configuration lines."""
+    removals = remove or set()
+    pending = {name: _safe_config_value(value) for name, value in updates.items()}
+    existing_lines = (
+        path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    )
+    output: list[str] = []
+    written: set[str] = set()
+    for line in existing_lines:
+        match = ASSIGNMENT_PATTERN.match(line)
+        name = match.group(1) if match else None
+        if name in removals:
+            continue
+        if name in pending:
+            if name not in written:
+                output.append(f"{name}={pending[name]}")
+                written.add(name)
+            continue
+        output.append(line)
+    for name, value in pending.items():
+        if name not in written:
+            output.append(f"{name}={value}")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as stream:
+        stream.write("\n".join(output).rstrip() + "\n")
+        temporary = Path(stream.name)
+    try:
+        temporary.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
+    os.replace(temporary, path)
+    try:
+        path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
+
+
+def _saved_config(path: Path) -> dict[str, str | None]:
+    if not path.is_file():
+        return {}
+    return dict(dotenv_values(path))
+
+
+def _select_legacy_action(backend_name: str, *, allow_session: bool) -> str | None:
+    choices = [
+        questionary.Choice(f"Move it to {backend_name} (Recommended)", value="migrate"),
+    ]
+    if allow_session:
+        choices.append(
+            questionary.Choice("Use it for this ShellPa process", value="session")
+        )
+    choices.extend(
+        [
+            questionary.Choice("Remove it and enter a new key", value="remove"),
+            questionary.Choice("Return to provider selection", value="back"),
+        ]
+    )
+    choice = questionary.select(
+        "A legacy plaintext API key was found. What would you like to do?",
+        choices=choices,
+        style=ocean_theme,
+    ).ask()
+    return check_cancel(choice)
+
+
+def _configure_api_credential(
+    provider: str,
+    env_path: Path,
+    store: CredentialStore,
+    *,
+    allow_session: bool = True,
+) -> Literal["keyring", "session", "legacy_session", "back"] | None:
+    key_name = PROVIDER_API_KEYS[provider]
+    saved = _saved_config(env_path)
+    legacy_value = saved.get(key_name)
+    backend = store.status()
+
+    if isinstance(legacy_value, str) and legacy_value.strip():
+        if backend.available:
+            action = _select_legacy_action(
+                backend.name,
+                allow_session=allow_session,
+            )
+        else:
+            console.print(
+                f"[yellow]{backend.detail} The legacy key will not be copied "
+                "into another plaintext file.[/yellow]"
+            )
+            choices = []
+            if allow_session:
+                choices.append(
+                    questionary.Choice(
+                        "Use the legacy key for this ShellPa process",
+                        value="session",
+                    )
+                )
+            choices.extend(
+                [
+                    questionary.Choice("Remove it and enter a new key", value="remove"),
+                    questionary.Choice("Return to provider selection", value="back"),
+                ]
+            )
+            action = questionary.select(
+                "How should ShellPa continue?",
+                choices=choices,
+                style=ocean_theme,
+            ).ask()
+            action = check_cancel(action)
+
+        if action is None:
+            return None
+        if action == "RETRY":
+            return _configure_api_credential(
+                provider,
+                env_path,
+                store,
+                allow_session=allow_session,
+            )
+        if action == "back":
+            return "back"
+        if action == "session":
+            set_session_credential(provider, legacy_value)
+            return "legacy_session"
+        if action == "migrate":
+            try:
+                store.set(provider, legacy_value)
+                if store.get(provider) != legacy_value.strip():
+                    raise CredentialStoreError("Credential verification failed.")
+            except CredentialStoreError as exc:
+                console.print(f"[red]{exc} The legacy value was not removed.[/red]")
+            else:
+                _update_config_file(
+                    env_path,
+                    {"SHELLPA_CREDENTIAL_STORE": "keyring"},
+                    remove=set(PROVIDER_API_KEYS.values()),
+                )
+                console.print(
+                    f"[green]Credential moved to {backend.name}; plaintext copy removed.[/green]"
+                )
+                return "keyring"
+        if action == "remove":
+            _update_config_file(env_path, {}, remove={key_name})
+
+    saved_provider = (saved.get("SHELLPA_PROVIDER") or "").strip().lower()
+    saved_source = (saved.get("SHELLPA_CREDENTIAL_STORE") or "").strip().lower()
+    if saved_provider == provider and saved_source == "keyring" and backend.available:
+        action = questionary.select(
+            f"A {provider} credential is already stored securely.",
+            choices=[
+                questionary.Choice("Keep existing credential", value="keep"),
+                questionary.Choice("Replace credential", value="replace"),
+                questionary.Choice("Remove and replace credential", value="remove"),
+                questionary.Choice("Return to provider selection", value="back"),
+            ],
+            style=ocean_theme,
+        ).ask()
+        action = check_cancel(action)
+        if action is None:
+            return None
+        if action == "back":
+            return "back"
+        if action == "keep":
+            try:
+                store.get(provider)
+            except CredentialStoreError:
+                console.print(
+                    "[yellow]The secure credential is missing. Enter a replacement.[/yellow]"
+                )
+            else:
+                return "keyring"
+        if action == "remove":
+            try:
+                store.delete(provider)
+            except CredentialStoreError as exc:
+                console.print(f"[red]{exc}[/red]")
+                return None
+
+    if backend.available:
+        console.print(f"[dim]Secure storage: {backend.name}[/dim]")
+    else:
+        console.print(f"[yellow]{backend.detail}[/yellow]")
+
+    while True:
+        api_key = questionary.password(
+            f"Enter your {provider.capitalize()} API Key:", style=ocean_theme
+        ).ask()
+        api_key = check_cancel(api_key)
+        if api_key is None:
+            return None
+        if api_key == "RETRY":
+            continue
+        api_key = api_key.strip()
+        if not api_key:
+            console.print("[red]API key cannot be empty.[/red]")
+            continue
+
+        if backend.available:
+            try:
+                store.set(provider, api_key)
+                if store.get(provider) != api_key:
+                    raise CredentialStoreError("Credential verification failed.")
+            except CredentialStoreError as exc:
+                console.print(f"[red]{exc}[/red]")
+                continue
+            console.print(f"[green]Credential stored in {backend.name}.[/green]")
+            return "keyring"
+
+        choices = []
+        if allow_session:
+            choices.append(
+                questionary.Choice(
+                    "Use this key for this ShellPa process", value="session"
+                )
+            )
+        choices.append(questionary.Choice("Return to provider selection", value="back"))
+        choice = questionary.select(
+            "Secure persistence is unavailable.",
+            choices=choices,
+            style=ocean_theme,
+        ).ask()
+        choice = check_cancel(choice)
+        if choice == "session":
+            set_session_credential(provider, api_key)
+            return "session"
+        if choice in {None, "back"}:
+            return choice
+
+
+def _select_recovery_preference(provider: str) -> str | None:
+    """Offer a persistent recovery privacy choice during interactive config."""
+    if not _interactive_terminal():
+        return None
+    choice = questionary.select(
+        "How should automatic command recovery use redacted failure details?",
+        choices=[
+            questionary.Choice("Ask before recovery (Recommended)", value="ask"),
+            questionary.Choice(
+                f"Always allow minimal recovery for {provider}", value="allow"
+            ),
+            questionary.Choice("Turn automatic recovery off", value="off"),
+        ],
+        style=ocean_theme,
+    ).ask()
+    return check_cancel(choice)
+
+
+def run_setup_wizard(
+    store: CredentialStore | None = None,
+    *,
+    allow_session: bool = True,
+) -> bool:
+    credential_store = store or CredentialStore()
     console.print()
     banner_text = pyfiglet.figlet_format("SHELLPA", font="slant")
     banner_text = f"{banner_text.rstrip()}  v{__version__}\n"
@@ -230,64 +515,79 @@ def run_setup_wizard():
             if codex_state == "back":
                 continue
 
-        # 3. Enter an API key only for providers that require one.
-        api_key_name: str | None = None
-        api_key: str | None = None
-        while provider != "codex":
-            api_key_name = ""
-            if provider == "openrouter":
-                api_key_name = "OPENROUTER_API_KEY"
-            elif provider == "openai":
-                api_key_name = "OPENAI_API_KEY"
-            elif provider == "gemini":
-                api_key_name = "GEMINI_API_KEY"
-            elif provider == "anthropic":
-                api_key_name = "ANTHROPIC_API_KEY"
-
-            api_key = questionary.password(
-                f"Enter your {provider.capitalize()} API Key:", style=ocean_theme
-            ).ask()
-
-            api_key = check_cancel(api_key)
-            if api_key is None:
+        credential_source: str | None = None
+        if provider != "codex":
+            credential_source = _configure_api_credential(
+                provider,
+                get_env_path(),
+                credential_store,
+                allow_session=allow_session,
+            )
+            if credential_source is None:
                 return False
-            if api_key == "RETRY":
+            if credential_source == "back":
                 continue
-            api_key = api_key.strip()
-            if not api_key:
-                console.print("[red]API key cannot be empty.[/red]")
-                continue
-            break  # break api loop
 
         break  # break main loop
 
-    # Save to global config
     env_path = get_env_path()
+    recovery_preference = _select_recovery_preference(provider)
+    if recovery_preference == "RETRY":
+        recovery_preference = "ask"
+    provider_permission_name = (
+        "SHELLPA_RECOVERY_PERMISSION_"
+        + re.sub(r"[^A-Za-z0-9]+", "_", provider).strip("_").upper()
+    )
+    updates = {
+        "SHELLPA_MODEL": model,
+        "SHELLPA_PROVIDER": provider,
+    }
+    recovery_removals: set[str] = set()
+    if recovery_preference == "ask":
+        recovery_removals.update(
+            {"SHELLPA_RECOVERY_PERMISSION", provider_permission_name}
+        )
+    elif recovery_preference == "allow":
+        updates[provider_permission_name] = "allow"
+        recovery_removals.add("SHELLPA_RECOVERY_PERMISSION")
+    elif recovery_preference == "off":
+        updates["SHELLPA_RECOVERY_PERMISSION"] = "off"
+        recovery_removals.add(provider_permission_name)
+    if credential_source == "keyring":
+        updates["SHELLPA_CREDENTIAL_STORE"] = "keyring"
+    _update_config_file(
+        env_path,
+        updates,
+        remove=(
+            (
+                set()
+                if credential_source == "legacy_session"
+                else set(PROVIDER_API_KEYS.values())
+            )
+            | (
+                {"SHELLPA_CREDENTIAL_STORE"}
+                if credential_source != "keyring"
+                else set()
+            )
+            | recovery_removals
+        ),
+    )
 
-    # Read existing if any
-    env_vars = {}
-    if env_path.exists():
-        with open(env_path) as f:
-            for line in f:
-                if "=" in line:
-                    k, v = line.strip().split("=", 1)
-                    env_vars[k] = v
-
-    # Update config
-    env_vars["SHELLPA_MODEL"] = model
-    env_vars["SHELLPA_PROVIDER"] = provider
-    if api_key_name is not None and api_key is not None:
-        env_vars[api_key_name] = api_key
-
-    with open(env_path, "w") as f:
-        for k, v in env_vars.items():
-            f.write(f"{k}={v}\n")
-
-    # Load into current environment immediately
     os.environ["SHELLPA_MODEL"] = model
     os.environ["SHELLPA_PROVIDER"] = provider
-    if api_key_name is not None and api_key is not None:
-        os.environ[api_key_name] = api_key
+    if credential_source == "keyring":
+        os.environ["SHELLPA_CREDENTIAL_STORE"] = "keyring"
+    else:
+        os.environ.pop("SHELLPA_CREDENTIAL_STORE", None)
+    if recovery_preference == "ask":
+        os.environ.pop("SHELLPA_RECOVERY_PERMISSION", None)
+        os.environ.pop(provider_permission_name, None)
+    elif recovery_preference == "allow":
+        os.environ.pop("SHELLPA_RECOVERY_PERMISSION", None)
+        os.environ[provider_permission_name] = "allow"
+    elif recovery_preference == "off":
+        os.environ["SHELLPA_RECOVERY_PERMISSION"] = "off"
+        os.environ.pop(provider_permission_name, None)
 
     console.print("\n[bold green]Configuration saved successfully! ✨[/bold green]")
     if provider == "codex":

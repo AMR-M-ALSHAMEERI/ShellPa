@@ -136,6 +136,47 @@ def test_execute_command_streams_and_captures_output(
     assert captured["kwargs"]["stderr"] is subprocess.PIPE
 
 
+def test_subprocess_environment_withholds_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    safe_values = {
+        "PATH": "system-path",
+        "HOME": "user-home",
+        "CUSTOM_OPERATIONAL": "enabled",
+    }
+    secret_values = {
+        "OPENAI_API_KEY": "openai-secret",
+        "OPENROUTER_API_KEY": "openrouter-secret",
+        "GEMINI_API_KEY": "gemini-secret",
+        "ANTHROPIC_API_KEY": "anthropic-secret",
+        "GITHUB_TOKEN": "github-secret",
+        "DATABASE_URL": "database-secret",
+        "CUSTOM_PASSWORD": "password-secret",
+        "SHELLPA_PROVIDER": "openai",
+    }
+    for name, value in {**safe_values, **secret_values}.items():
+        monkeypatch.setenv(name, value)
+
+    child_environment = executor._subprocess_environment(request())
+
+    for name, value in safe_values.items():
+        assert child_environment[name] == value
+    assert not set(secret_values) & set(child_environment)
+
+
+def test_environment_allowlist_cannot_forward_a_credential(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PATH", "system-path")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-secret")
+
+    child_environment = executor._subprocess_environment(
+        request(environment_allowlist={"PATH", "OPENAI_API_KEY"})
+    )
+
+    assert child_environment == {"PATH": "system-path"}
+
+
 def test_execute_command_notifies_observer_around_streaming(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

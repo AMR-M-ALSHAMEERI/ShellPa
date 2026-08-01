@@ -6,6 +6,10 @@ from rich.console import Console
 
 import shellpa.diagnostics as diagnostics
 from shellpa.codex_provider import CodexAccountState, CodexAccountStatus
+from shellpa.credentials import (
+    CredentialBackendState,
+    CredentialBackendStatus,
+)
 
 
 def configured_environment() -> dict[str, str]:
@@ -143,3 +147,29 @@ def test_doctor_reports_codex_sdk_and_chatgpt_status_without_identity(
     assert "embedded Codex SDK" in combined
     assert "ChatGPT account connected (plus)" in combined
     assert "private@example.com" not in combined
+
+
+def test_doctor_reports_secure_backend_without_retrieving_value(monkeypatch) -> None:
+    monkeypatch.setattr(
+        diagnostics,
+        "inspect_credential_backend",
+        lambda: CredentialBackendStatus(
+            CredentialBackendState.AVAILABLE,
+            "Windows Credential Locker",
+            "Secure credentials are managed by Windows Credential Locker.",
+        ),
+    )
+
+    report = diagnostics.run_doctor(
+        environ={
+            "SHELLPA_PROVIDER": "openai",
+            "SHELLPA_MODEL": "gpt-4o",
+            "SHELLPA_CREDENTIAL_STORE": "keyring",
+        }
+    )
+    storage = next(
+        check for check in report.checks if check.name == "Credential storage"
+    )
+
+    assert storage.level is diagnostics.CheckLevel.PASS
+    assert "Windows Credential Locker" in storage.detail

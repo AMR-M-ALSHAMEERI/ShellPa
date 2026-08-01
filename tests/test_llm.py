@@ -49,6 +49,7 @@ def test_generate_command_uses_configured_model_and_validates_response(
     monkeypatch.setattr(llm, "completion", fake_completion)
     monkeypatch.setenv("SHELLPA_MODEL", "test/provider-model")
     monkeypatch.setenv("SHELLPA_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "provider-secret")
 
     proposal = llm.generate_command(
         "show the date",
@@ -59,6 +60,8 @@ def test_generate_command_uses_configured_model_and_validates_response(
     assert proposal.command == "Get-Date"
     assert captured["model"] == "test/provider-model"
     assert captured["response_format"] == {"type": "json_object"}
+    assert captured["api_key"] == "provider-secret"
+    assert "provider-secret" not in str(captured["messages"])
     assert captured["messages"][-1]["content"] == "show the date"
     system_content = captured["messages"][0]["content"]
     assert "Project types: python" in system_content
@@ -80,6 +83,7 @@ def test_generate_recovery_includes_failure_context(
 
     monkeypatch.setattr(llm, "completion", fake_completion)
     monkeypatch.setenv("SHELLPA_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "provider-secret")
 
     proposal = llm.generate_recovery_command(
         RecoveryContext(
@@ -112,6 +116,7 @@ def test_request_command_rejects_empty_provider_content(
 ) -> None:
     monkeypatch.setattr(llm, "completion", lambda **kwargs: fake_response(None))
     monkeypatch.setenv("SHELLPA_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "provider-secret")
 
     with pytest.raises(ValueError, match="empty command response"):
         llm.generate_command("list files", {"os": "Windows", "shell": "powershell"})

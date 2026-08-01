@@ -27,6 +27,7 @@ from .config import (
     inspect_config,
     load_environment_sources,
 )
+from .credentials import inspect_credential_backend
 from .icons import unicode_icons_supported
 from .os_detect import detect_environment
 from .setup import get_env_path
@@ -70,6 +71,7 @@ REQUIRED_MODULES = (
     "litellm",
     "pydantic",
     "dotenv",
+    "keyring",
     "pyfiglet",
     "questionary",
     "prompt_toolkit",
@@ -109,11 +111,20 @@ def _configuration_checks(status: ConfigStatus) -> list[DiagnosticCheck]:
             "Managed by the official Codex SDK; value unavailable to ShellPa.",
         )
     else:
+        source_labels = {
+            "keyring": "stored securely (value hidden)",
+            "environment": "provided by the current environment (value hidden)",
+            "session": "available for this process only (value hidden)",
+        }
+        detail = source_labels.get(
+            status.credential_source or "",
+            f"{status.api_key_name or 'provider credential'} is missing or empty.",
+        )
         credential_check = _check(
             "Credential",
             status.api_key_configured,
-            f"{status.api_key_name or 'provider credential'} is present (value hidden)",
-            f"{status.api_key_name or 'provider credential'} is missing or empty.",
+            detail,
+            detail,
             remedy="Run: shellpa config",
         )
     return [
@@ -186,6 +197,20 @@ def _codex_checks() -> list[DiagnosticCheck]:
             )
         )
     return checks
+
+
+def _credential_storage_check() -> DiagnosticCheck:
+    status = inspect_credential_backend()
+    return DiagnosticCheck(
+        "Credential storage",
+        CheckLevel.PASS if status.available else CheckLevel.FAIL,
+        status.detail,
+        (
+            ""
+            if status.available
+            else "Configure an operating-system credential service or use a session-only key."
+        ),
+    )
 
 
 def _online_check(
@@ -261,13 +286,10 @@ def run_doctor(
             f"{sys.version.split()[0]} is unsupported.",
             remedy="Install Python 3.10 or newer.",
         ),
-        _check(
-            "Virtual environment",
-            in_virtualenv,
-            str(Path(sys.prefix)),
-            "ShellPa is not running inside a virtual environment.",
-            fail_level=CheckLevel.WARN,
-            remedy="Activate the project venv before development work.",
+        DiagnosticCheck(
+            "Python runtime",
+            CheckLevel.PASS,
+            "isolated environment" if in_virtualenv else "system environment",
         ),
         DiagnosticCheck(
             "Operating system",
@@ -283,6 +305,11 @@ def run_doctor(
             remedy="Use a supported shell or correct PATH.",
         ),
         *_configuration_checks(status),
+        *(
+            [_credential_storage_check()]
+            if status.credential_source == "keyring"
+            else []
+        ),
         *(_codex_checks() if status.provider == "codex" else []),
         _check(
             "Git",

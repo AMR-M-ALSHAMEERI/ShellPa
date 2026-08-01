@@ -2,6 +2,26 @@
 
 All notable user-facing changes to ShellPa are recorded here.
 
+## 0.3.1 - 2026-08-01
+
+- Moved API-provider credentials from ShellPa's plaintext user configuration
+  into the operating-system credential store, with verified migration for
+  existing values and an explicit session-only fallback when secure persistence
+  is unavailable.
+- Prevented executed child commands from inheriting provider credentials,
+  ShellPa configuration variables, and other secret-shaped environment values.
+- Passed API keys directly to the selected provider request instead of placing
+  newly configured credentials in the global process environment.
+- Replaced the generic recovery retry prompt with a transparent, configurable
+  permission that can display the exact minimized and redacted recovery facts.
+- Reduced and bounded recovery diagnostics, added sensitivity-aware permission,
+  and retained fresh safety review for every corrected command.
+- Fixed `pipx`'s private application environment being misidentified as the
+  user's active project `venv` while preserving explicit venv, Conda, Poetry,
+  and Pipenv detection.
+- Added credential-store diagnostics, dependency vulnerability auditing, and
+  adversarial credential-isolation tests.
+
 ## 0.3.0 - 2026-07-29
 
 - Added privacy-conscious workspace awareness with explicit project boundaries,

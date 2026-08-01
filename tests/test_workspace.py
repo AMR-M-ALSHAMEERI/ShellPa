@@ -181,11 +181,11 @@ def test_python_environment_uses_variable_names_not_values(
     assert "private-path" not in context.model_dump_json()
 
 
-def test_python_environment_detects_interpreter_prefix() -> None:
+def test_python_environment_ignores_application_runtime_prefix() -> None:
     context = detect_python_environment({}, prefix="venv", base_prefix="base")
 
-    assert context.active is True
-    assert context.kind is PythonEnvironmentKind.VENV
+    assert context.active is False
+    assert context.kind is None
 
 
 def test_python_environment_can_be_inactive() -> None:

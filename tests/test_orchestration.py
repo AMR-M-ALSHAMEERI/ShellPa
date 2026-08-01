@@ -153,6 +153,11 @@ def test_recovery_proposal_is_confirmed_and_executed(
         "confirm",
         lambda *args, **kwargs: Confirmation(answers),
     )
+    monkeypatch.setattr(
+        main,
+        "request_recovery_permission",
+        lambda *args, **kwargs: True,
+    )
 
     def fake_execute(request, observer=None):
         executed.append(request.command)
@@ -331,6 +336,11 @@ def test_recovery_command_receives_fresh_critical_assessment(
         main.questionary,
         "confirm",
         lambda *args, **kwargs: Confirmation(answers),
+    )
+    monkeypatch.setattr(
+        main,
+        "request_recovery_permission",
+        lambda *args, **kwargs: True,
     )
 
     def fake_execute(request, observer=None):

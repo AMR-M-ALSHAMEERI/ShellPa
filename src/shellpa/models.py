@@ -156,12 +156,13 @@ class RecoveryContext(BaseModel):
     failed_command: str
     error_message: str
     exit_code: int | None
-    working_directory: Path
+    working_directory: Path | None = None
     attempt: int = Field(ge=1)
     timed_out: bool = False
     cancelled: bool = False
     output_truncated: bool = False
     partial_effect_possible: bool = True
+    sensitive_data_redacted: bool = False
 
 
 class GitContext(BaseModel):

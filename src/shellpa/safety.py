@@ -50,6 +50,14 @@ def _rule(
 
 POLICY_RULES = (
     _rule(
+        "high.sensitive-file-access",
+        r"(?<![\w.-])(?:\.shellpa\.env|\.env(?!\.example)(?:\.[\w-]+)?|"
+        r"credentials\.json|auth\.json|\.pypirc|\.npmrc|id_rsa|id_ed25519)"
+        r"(?![\w.-])",
+        RiskLevel.HIGH,
+        "The command references a file that commonly contains credentials or secrets.",
+    ),
+    _rule(
         "critical.disk-management",
         r"\b(?:format-volume|clear-disk|initialize-disk|diskpart|wipefs|"
         r"mkfs(?:\.\w+)?|fdisk|parted)\b|"

@@ -1,21 +1,29 @@
 import os
 from collections.abc import Mapping
+from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, find_dotenv
 from pydantic import BaseModel
 from rich.console import Console
 
+from .credentials import (
+    PROVIDER_API_KEYS,
+    has_session_credential,
+    set_session_credential,
+)
 from .setup import get_env_path, run_setup_wizard
 
 console = Console()
 
-PROVIDER_API_KEYS = {
-    "openrouter": "OPENROUTER_API_KEY",
-    "openai": "OPENAI_API_KEY",
-    "gemini": "GEMINI_API_KEY",
-    "anthropic": "ANTHROPIC_API_KEY",
-}
 SUPPORTED_PROVIDERS = frozenset((*PROVIDER_API_KEYS, "codex"))
+CONFIG_METADATA_KEYS = frozenset(
+    {
+        "SHELLPA_MODEL",
+        "SHELLPA_PROVIDER",
+        "SHELLPA_CREDENTIAL_STORE",
+        "SHELLPA_RECOVERY_PERMISSION",
+    }
+)
 
 
 class ConfigStatus(BaseModel):
@@ -26,6 +34,7 @@ class ConfigStatus(BaseModel):
     api_key_name: str | None
     model_configured: bool
     api_key_configured: bool
+    credential_source: str | None = None
 
     @property
     def is_configured(self) -> bool:
@@ -62,9 +71,22 @@ def inspect_config(environ: Mapping[str, str] | None = None) -> ConfigStatus:
     model_name = (values.get("SHELLPA_MODEL") or "").strip() or None
     provider = infer_provider(model_name, values.get("SHELLPA_PROVIDER"))
     api_key_name = PROVIDER_API_KEYS.get(provider) if provider else None
+    declared_source = (values.get("SHELLPA_CREDENTIAL_STORE") or "").strip().lower()
+    credential_source: str | None = None
 
-    if api_key_name:
-        api_key_configured = bool((values.get(api_key_name) or "").strip())
+    if provider and has_session_credential(provider):
+        api_key_configured = True
+        credential_source = "session"
+    elif api_key_name and (values.get(api_key_name) or "").strip():
+        api_key_configured = True
+        credential_source = "environment"
+    elif api_key_name and declared_source == "keyring":
+        # Configuration status intentionally trusts the non-secret marker. The
+        # credential itself is retrieved only when the provider is called.
+        api_key_configured = True
+        credential_source = "keyring"
+    elif api_key_name:
+        api_key_configured = False
     else:
         # Backward compatibility for custom models saved before provider metadata.
         api_key_configured = any(
@@ -78,15 +100,42 @@ def inspect_config(environ: Mapping[str, str] | None = None) -> ConfigStatus:
         api_key_name=api_key_name,
         model_configured=model_name is not None,
         api_key_configured=api_key_configured,
+        credential_source=credential_source,
     )
 
 
+def _load_metadata_file(path: Path) -> dict[str, str | None]:
+    if not path.is_file():
+        return {}
+    values = dotenv_values(path)
+    metadata_names = {
+        name
+        for name in values
+        if name in CONFIG_METADATA_KEYS
+        or name.startswith("SHELLPA_RECOVERY_PERMISSION_")
+    }
+    for name in metadata_names:
+        value = values.get(name)
+        if isinstance(value, str) and value.strip():
+            os.environ.setdefault(name, value.strip())
+    return dict(values)
+
+
 def load_environment_sources() -> None:
-    """Load project and user configuration without starting the setup wizard."""
-    load_dotenv()
+    """Load non-secret project and user metadata without importing API keys."""
+    local_env = find_dotenv(usecwd=True)
+    if local_env:
+        local_values = _load_metadata_file(Path(local_env))
+        model = (local_values.get("SHELLPA_MODEL") or "").strip()
+        provider = infer_provider(model, local_values.get("SHELLPA_PROVIDER"))
+        key_name = PROVIDER_API_KEYS.get(provider or "")
+        local_credential = local_values.get(key_name or "")
+        if provider and isinstance(local_credential, str) and local_credential.strip():
+            # A project-managed .env remains compatible, but its key is held in
+            # memory rather than imported into the process environment.
+            set_session_credential(provider, local_credential)
     env_path = get_env_path()
-    if env_path.exists():
-        load_dotenv(dotenv_path=env_path)
+    _load_metadata_file(env_path)
 
 
 def load_config() -> ConfigStatus:

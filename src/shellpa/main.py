@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from time import monotonic
 
@@ -30,7 +31,7 @@ from .models import (
     WorkspaceContext,
 )
 from .os_detect import detect_environment
-from .recovery import build_recovery_context
+from .recovery import build_recovery_context, request_recovery_permission
 from .repl import InteractiveState, run_interactive_session
 from .safety import assess_command, decide_permission
 from .setup import run_setup_wizard
@@ -297,16 +298,15 @@ def process_query(
                 )
 
             if attempt < max_attempts - 1:
-                recover = questionary.confirm(
-                    "Would you like me to try and fix this automatically?",
-                    qmark="ShellPa ",
+                recovery_context = build_recovery_context(query, request, result)
+                recover = request_recovery_permission(
+                    console,
+                    recovery_context,
+                    (os.environ.get("SHELLPA_PROVIDER") or "").strip(),
                     style=questionary_style(active_settings),
-                    default=True,
-                ).ask()
-
+                )
                 if recover:
                     is_recovery = True
-                    recovery_context = build_recovery_context(query, request, result)
                     continue
                 console.print("[yellow]Auto-recovery aborted by user.[/yellow]")
                 return
@@ -513,7 +513,7 @@ def run_command(
 @app.command("config")
 def config_command() -> None:
     """Configure the provider, model, and credential."""
-    if not run_setup_wizard():
+    if not run_setup_wizard(allow_session=False):
         raise typer.Exit(code=1)
 
 

@@ -71,3 +71,18 @@ and platform metadata. They exclude requests, generated commands, command
 output, environment variables, and credentials.
 
 Set `SHELLPA_LOGGING=0` to disable this local log.
+
+## Credential and recovery privacy
+
+`shellpa config` stores API-provider credentials in the operating-system
+credential service when one is available. The user configuration retains only
+provider, model, credential-source, and recovery-preference metadata. Codex
+continues to manage its own ChatGPT session without exposing credentials to
+ShellPa.
+
+When an executed command fails, ShellPa can make a second normal model request
+to obtain a corrected command. The recovery selector can continue once,
+remember permission for the selected provider, show the exact minimized and
+redacted facts, stop the current recovery, or turn automatic recovery off.
+Every corrected command receives a fresh deterministic safety assessment and
+the required execution authorization.

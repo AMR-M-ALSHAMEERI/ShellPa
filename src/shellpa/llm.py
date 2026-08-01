@@ -2,6 +2,7 @@ import os
 import re
 from typing import Any, Protocol
 
+from .credentials import PROVIDER_API_KEYS, resolve_provider_credential
 from .models import CommandProposal, RecoveryContext
 
 # Backward-compatible name for code that imported the original response model.
@@ -45,13 +46,23 @@ class LiteLLMProvider:
         user_prompt: str,
     ) -> CommandProposal:
         model = os.getenv("SHELLPA_MODEL", "openrouter/openai/gpt-3.5-turbo")
-        response = completion(
-            model=model,
-            messages=[
+        provider = os.getenv("SHELLPA_PROVIDER", "").strip().lower()
+        request_options: dict[str, Any] = {
+            "model": model,
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            response_format={"type": "json_object"},
+            "response_format": {"type": "json_object"},
+        }
+        if provider in PROVIDER_API_KEYS:
+            request_options["api_key"] = resolve_provider_credential(
+                provider,
+                source=(os.getenv("SHELLPA_CREDENTIAL_STORE") or "").strip().lower()
+                or None,
+            )
+        response = completion(
+            **request_options,
         )
 
         content = response.choices[0].message.content

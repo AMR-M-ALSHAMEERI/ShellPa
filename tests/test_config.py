@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 import shellpa.config as config
+import shellpa.credentials as credentials
 
 
 @pytest.mark.parametrize(
@@ -61,6 +62,20 @@ def test_inspect_config_accepts_nonempty_matching_key() -> None:
 
     assert status.provider == "gemini"
     assert status.is_configured is True
+    assert status.credential_source == "environment"
+
+
+def test_inspect_config_accepts_secret_free_keyring_marker() -> None:
+    status = config.inspect_config(
+        {
+            "SHELLPA_MODEL": "gpt-4o",
+            "SHELLPA_PROVIDER": "openai",
+            "SHELLPA_CREDENTIAL_STORE": "keyring",
+        }
+    )
+
+    assert status.is_configured is True
+    assert status.credential_source == "keyring"
 
 
 def test_codex_configuration_never_requires_an_api_key() -> None:
@@ -92,8 +107,7 @@ def test_custom_model_keeps_backward_compatible_key_detection() -> None:
 def test_load_config_returns_status_without_wizard(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(config, "load_dotenv", lambda *args, **kwargs: None)
-    monkeypatch.setattr(config, "get_env_path", lambda: Path("missing.env"))
+    monkeypatch.setattr(config, "load_environment_sources", lambda: None)
     monkeypatch.setenv("SHELLPA_MODEL", "openrouter/openai/gpt-4o-mini")
     monkeypatch.setenv("OPENROUTER_API_KEY", "configured")
 
@@ -106,8 +120,7 @@ def test_load_config_returns_status_without_wizard(
 def test_load_config_rejects_cancelled_invalid_configuration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(config, "load_dotenv", lambda *args, **kwargs: None)
-    monkeypatch.setattr(config, "get_env_path", lambda: Path("missing.env"))
+    monkeypatch.setattr(config, "load_environment_sources", lambda: None)
     monkeypatch.setattr(config, "run_setup_wizard", lambda: False)
     for key in (
         "SHELLPA_MODEL",
@@ -123,3 +136,38 @@ def test_load_config_rejects_cancelled_invalid_configuration(
         config.load_config()
 
     assert exc_info.value.code == 1
+
+
+def test_project_env_key_is_kept_in_memory_not_process_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    local_env = tmp_path / ".env"
+    local_env.write_text(
+        "SHELLPA_PROVIDER=openai\n"
+        "SHELLPA_MODEL=gpt-4o\n"
+        "OPENAI_API_KEY=project-secret\n",
+        encoding="utf-8",
+    )
+    credentials._SESSION_CREDENTIALS.clear()
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("SHELLPA_PROVIDER", raising=False)
+    monkeypatch.delenv("SHELLPA_MODEL", raising=False)
+    monkeypatch.setattr(config, "find_dotenv", lambda **kwargs: str(local_env))
+    monkeypatch.setattr(config, "get_env_path", lambda: tmp_path / "missing.env")
+
+    config.load_environment_sources()
+
+    status = config.inspect_config()
+    assert status.is_configured is True
+    assert status.credential_source == "session"
+    assert "OPENAI_API_KEY" not in config.os.environ
+    assert (
+        credentials.resolve_provider_credential(
+            "openai",
+            source="session",
+            environ={},
+        )
+        == "project-secret"
+    )
+    credentials._SESSION_CREDENTIALS.clear()

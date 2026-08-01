@@ -63,6 +63,10 @@ pipx install "shellpa[codex]"
 The configuration wizard can also install the optional Codex provider after
 explicit approval. A separate Codex CLI installation is not required.
 
+If `pipx` is not installed, or for platform-specific update and removal
+instructions, see the
+[installation guide](https://github.com/AMR-M-ALSHAMEERI/ShellPa/blob/main/docs/installation.md).
+
 ## Quick start
 
 Configure a provider:
@@ -105,6 +109,13 @@ The Codex path delegates sign-in and session storage to the official embedded
 Codex runtime. ShellPa does not read or store Codex credentials. Existing
 sessions are preserved by default, and logout requires explicit confirmation.
 
+For API-backed providers, ShellPa stores newly configured keys in Windows
+Credential Locker, macOS Keychain, Linux Secret Service, or KWallet through the
+active operating-system credential backend. Existing plaintext user
+configuration is migrated only after the secure copy is verified. When secure
+storage is unavailable, ShellPa can use a key for the current process without
+silently saving another plaintext copy.
+
 ```bash
 shellpa login
 shellpa login --device-code
@@ -122,6 +133,10 @@ ShellPa assesses every proposed command locally:
 | High risk | Requires typed confirmation |
 | Critical | Manual-only; ShellPa will not execute it |
 | Unknown | Requires review and cannot be silently trusted |
+
+Approved commands inherit operational environment variables needed by the
+shell, but ShellPa withholds provider keys, its own configuration variables,
+and other secret-shaped values from child processes.
 
 Permission modes:
 

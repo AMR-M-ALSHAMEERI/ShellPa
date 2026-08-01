@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import sys
 import threading
 from collections.abc import Mapping
 from pathlib import Path
@@ -127,10 +126,12 @@ def detect_python_environment(
     prefix: str | None = None,
     base_prefix: str | None = None,
 ) -> PythonEnvironmentContext:
-    """Identify an active environment from names and interpreter metadata only."""
+    """Identify an environment explicitly activated by the user's shell."""
     active_environment = os.environ if environment is None else environment
-    effective_prefix = sys.prefix if prefix is None else prefix
-    effective_base_prefix = sys.base_prefix if base_prefix is None else base_prefix
+
+    # Interpreter isolation describes ShellPa's runtime, not necessarily the
+    # user's workspace. A pipx-installed application always has a private venv.
+    _ = (prefix, base_prefix)
 
     if active_environment.get("CONDA_PREFIX"):
         kind = PythonEnvironmentKind.CONDA
@@ -138,9 +139,7 @@ def detect_python_environment(
         kind = PythonEnvironmentKind.PIPENV
     elif active_environment.get("POETRY_ACTIVE"):
         kind = PythonEnvironmentKind.POETRY
-    elif active_environment.get("VIRTUAL_ENV") or (
-        effective_prefix != effective_base_prefix
-    ):
+    elif active_environment.get("VIRTUAL_ENV"):
         kind = PythonEnvironmentKind.VENV
     else:
         return PythonEnvironmentContext()

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "shellpa"
-version = "0.3.0"
+version = "0.3.1"
 description = "A safety-conscious cross-platform terminal assistant with deterministic command review."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -46,6 +46,7 @@ dependencies = [
     "litellm>=1.0.0",
     "pydantic>=2.0.0",
     "python-dotenv>=1.0.0",
+    "keyring>=25.0.0",
     "pyfiglet>=1.0.2",
     "questionary>=2.0.0",
     "prompt-toolkit>=3.0.0",
@@ -58,6 +59,7 @@ codex = [
 dev = [
     "build>=1.2",
     "mypy>=1.13",
+    "pip-audit>=2.10,<3",
     "pytest>=8.0,<10",
     "ruff>=0.8",
 ]

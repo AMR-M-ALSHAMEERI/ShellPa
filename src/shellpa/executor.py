@@ -5,6 +5,7 @@ from __future__ import annotations
 import locale
 import os
 import queue
+import re
 import signal
 import subprocess
 import sys
@@ -19,6 +20,31 @@ from .models import ExecutionRequest, ExecutionResult
 console = Console()
 
 STREAM_END = object()
+
+PROVIDER_CREDENTIAL_NAMES = frozenset(
+    {
+        "OPENROUTER_API_KEY",
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
+        "ANTHROPIC_API_KEY",
+    }
+)
+SENSITIVE_ENVIRONMENT_NAMES = frozenset(
+    {
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AZURE_CLIENT_SECRET",
+        "DATABASE_URL",
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "NPM_TOKEN",
+        "PGPASSWORD",
+        "PYPI_TOKEN",
+    }
+)
+SENSITIVE_NAME_PARTS = frozenset(
+    {"APIKEY", "CREDENTIAL", "KEY", "PASSWORD", "PASSWD", "SECRET", "TOKEN"}
+)
 
 
 class ExecutionObserver(Protocol):
@@ -71,14 +97,26 @@ def build_shell_invocation(request: ExecutionRequest) -> list[str]:
 
 
 def _subprocess_environment(request: ExecutionRequest) -> dict[str, str]:
-    """Create a minimal inherited environment based on approved variable names."""
-    if not request.environment_allowlist:
-        return os.environ.copy()
+    """Inherit operational variables while withholding credential material."""
+    allowed = request.environment_allowlist
     return {
         name: value
         for name, value in os.environ.items()
-        if name in request.environment_allowlist
+        if (not allowed or name in allowed) and not is_sensitive_environment_name(name)
     }
+
+
+def is_sensitive_environment_name(name: str) -> bool:
+    """Return whether an environment variable may contain credential material."""
+    normalized = name.strip().upper()
+    if (
+        normalized in PROVIDER_CREDENTIAL_NAMES
+        or normalized in SENSITIVE_ENVIRONMENT_NAMES
+        or normalized.startswith("SHELLPA_")
+    ):
+        return True
+    parts = {part for part in re.split(r"[^A-Z0-9]+", normalized) if part}
+    return bool(parts & SENSITIVE_NAME_PARTS)
 
 
 def _process_group_options() -> dict:

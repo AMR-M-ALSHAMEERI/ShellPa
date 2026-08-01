@@ -50,6 +50,10 @@ jobs:
       - name: Test
         run: python -m pytest
 
+      - name: Audit installed dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: python -m pip_audit --local --skip-editable
+
       - name: Build package
         run: python -m build
 

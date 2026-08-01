@@ -84,7 +84,7 @@ def test_config_runs_wizard_without_starting_shell(monkeypatch) -> None:
     result = runner.invoke(main.app, ["config"])
 
     assert result.exit_code == 0
-    wizard.assert_called_once_with()
+    wizard.assert_called_once_with(allow_session=False)
     run_shellpa.assert_not_called()
 
 
