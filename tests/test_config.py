@@ -108,6 +108,8 @@ def test_load_config_returns_status_without_wizard(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(config, "load_environment_sources", lambda: None)
+    monkeypatch.delenv("SHELLPA_PROVIDER", raising=False)
+    monkeypatch.delenv("SHELLPA_CREDENTIAL_STORE", raising=False)
     monkeypatch.setenv("SHELLPA_MODEL", "openrouter/openai/gpt-4o-mini")
     monkeypatch.setenv("OPENROUTER_API_KEY", "configured")
 
@@ -121,7 +123,11 @@ def test_load_config_rejects_cancelled_invalid_configuration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(config, "load_environment_sources", lambda: None)
-    monkeypatch.setattr(config, "run_setup_wizard", lambda: False)
+    monkeypatch.setattr(
+        config,
+        "run_setup_wizard",
+        lambda: config.SetupOutcome.CANCELLED,
+    )
     for key in (
         "SHELLPA_MODEL",
         "SHELLPA_PROVIDER",

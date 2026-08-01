@@ -51,7 +51,7 @@ def _about_selector_content(
     labels = {
         AboutAction.AMR_PROFILE: "AMR — GitHub profile",
         AboutAction.KHADIGA_PROFILE: "KHADIGA — GitHub profile",
-        AboutAction.REPOSITORY: "ShellPa — private repository",
+        AboutAction.REPOSITORY: "ShellPa — GitHub repository",
         AboutAction.RETURN: return_label,
     }
     icons = {

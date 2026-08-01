@@ -12,13 +12,11 @@ from html import escape
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
-from prompt_toolkit.application import Application, get_app
+from prompt_toolkit.application import get_app
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.formatted_text import HTML, FormattedText
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.layout import Layout, Window
-from prompt_toolkit.layout.controls import FormattedTextControl
 from rich.console import Console
 from rich.table import Table
 
@@ -26,8 +24,21 @@ from .about import run_about_menu
 from .codex_auth import login_codex_interactively, logout_codex_interactively
 from .diagnostics import display_doctor, run_doctor
 from .icons import model_icon, shell_icon, ui_icon, unicode_icons_supported
+from .identity import (
+    MICRO_MARK,
+    input_caret_frame,
+    prompt_mark_frame,
+    signal_sweep_active,
+)
 from .models import PermissionMode, WorkspaceContext
-from .setup import run_setup_wizard
+from .selector import (
+    SelectionOption,
+    SelectorAction,
+    select_interactively,
+    selector_content,
+)
+from .setup import SetupOutcome, run_setup_wizard
+from .updater import display_guided_update
 from .ux import (
     THEMES,
     UXSettings,
@@ -51,12 +62,13 @@ SLASH_COMMANDS = (
     "/doctor",
     "/context",
     "/about",
+    "/update",
     "/clear",
     "/history",
     "/exit",
 )
 
-THEME_ORDER = ("ocean", "aurora", "minimal", "contrast", "ansi")
+THEME_ORDER = ("shellpa", "ocean", "aurora", "minimal", "contrast", "ansi")
 IDLE_FRAMES = ("✦", "✧", "·", "✧")
 ASCII_IDLE_FRAMES = ("*", "+", ".", "+")
 MODE_ORDER = (
@@ -65,6 +77,7 @@ MODE_ORDER = (
     PermissionMode.TRUSTED,
 )
 MOTION_ORDER = ("full", "compact", "off")
+UPDATE_NOTIFICATION_ORDER = ("weekly", "manual", "off")
 
 
 @dataclass(frozen=True)
@@ -164,11 +177,18 @@ def _show_help(console: Console) -> None:
         ("/config", "Run the provider configuration wizard"),
         ("/login [device-code]", "Connect Codex to a ChatGPT account"),
         ("/logout", "Review and clear the Codex-managed account session"),
-        ("/theme [ocean|aurora|minimal|contrast|ansi]", "Preview or change theme"),
+        (
+            "/theme [shellpa|ocean|aurora|minimal|contrast|ansi]",
+            "Preview or change theme",
+        ),
         ("/motion [full|compact|off]", "Change startup animation"),
         ("/doctor", "Run local configuration and environment checks"),
         ("/context", "Inspect workspace facts and provider-safe context"),
         ("/about", "Show ShellPa identity and version"),
+        (
+            "/update [settings|weekly|manual|off]",
+            "Check PyPI or configure update notifications",
+        ),
         ("/clear or Ctrl+L", "Clear visible output"),
         ("/history", "Show requests from this session"),
         ("/exit", "End the session"),
@@ -181,79 +201,86 @@ def _show_help(console: Console) -> None:
 
 
 def _idle_prompt(settings: UXSettings) -> Callable[[], FormattedText]:
+    started_at: list[float | None] = [None]
+
     def render() -> FormattedText:
         theme = active_theme(settings)
         try:
             has_text = bool(get_app().current_buffer.text)
         except Exception:
             has_text = False
-        animated = (
+        motion_enabled = (
             settings.animation == "full"
             and not settings.reduced_motion
             and not has_text
         )
-        frames = IDLE_FRAMES if unicode_icons_supported() else ASCII_IDLE_FRAMES
-        frame = (
-            frames[int(time.monotonic() * 4) % len(frames)]
-            if animated
-            else ui_icon("assistant")
+        now = time.monotonic()
+        start = started_at[0]
+        if start is None:
+            start = now
+            started_at[0] = start
+        elapsed = max(0.0, now - start)
+        mark = prompt_mark_frame(
+            elapsed,
+            has_input=has_text,
+            motion_enabled=motion_enabled,
+            unicode=unicode_icons_supported(),
+        )
+        caret = input_caret_frame(
+            elapsed,
+            has_input=has_text,
+            motion_enabled=motion_enabled,
+            unicode=unicode_icons_supported(),
+        )
+        mark_color = (
+            theme.accent
+            if signal_sweep_active(elapsed, motion_enabled=motion_enabled)
+            else theme.identity
         )
         return FormattedText(
             [
-                (f"fg:{theme.identity} bold", f"{frame} ShellPa"),
-                (f"fg:{theme.accent} bold", " › "),
+                (f"fg:{theme.identity} bold", mark[:1]),
+                (f"fg:{mark_color} bold", mark[1:]),
+                (f"fg:{theme.identity} bold", " ShellPa"),
+                (
+                    f"fg:{theme.identity if signal_sweep_active(elapsed, motion_enabled=motion_enabled) else theme.accent} bold",
+                    f" {caret} ",
+                ),
             ]
         )
 
     return render
 
 
-def _theme_selector_content(selected_index: list[int]) -> FormattedText:
+def _theme_selector_content(
+    selected_index: list[int],
+    current_theme: str | None = None,
+) -> FormattedText:
     selected_name = THEME_ORDER[selected_index[0]]
-    selected_theme = THEMES[selected_name]
-    content: list[tuple[str, str]] = [
-        (f"fg:{selected_theme.identity} bold", "Select a ShellPa theme\n\n")
-    ]
-    for index, name in enumerate(THEME_ORDER):
-        theme = THEMES[name]
-        marker = (
-            ("❯" if unicode_icons_supported() else ">")
-            if index == selected_index[0]
-            else " "
-        )
-        style = (
-            f"fg:{selected_theme.identity} bold reverse"
-            if index == selected_index[0]
-            else f"fg:{selected_theme.muted}"
-        )
-        content.append((style, f" {marker} {ui_icon('theme')} {theme.label}\n"))
-    content.extend(
+    persisted_theme = current_theme if current_theme in THEME_ORDER else selected_name
+    settings = UXSettings(theme=persisted_theme)
+    return selector_content(
+        "Select a ShellPa theme",
+        tuple(SelectionOption(name, THEMES[name].label) for name in THEME_ORDER),
+        selected_index[0],
+        persisted_theme,
+        settings,
+        preview=_theme_preview,
+        allow_back=True,
+    )
+
+
+def _theme_preview(name: str, settings: UXSettings) -> FormattedText:
+    theme = THEMES[name]
+    return FormattedText(
         [
-            ("", "\n"),
-            (f"fg:{selected_theme.identity} bold", "Live preview\n"),
-            (
-                f"fg:{selected_theme.accent}",
-                f"{ui_icon('assistant')} ShellPa › explain this project\n",
-            ),
-            (
-                f"fg:{selected_theme.success}",
-                f"{ui_icon('success')} Completed successfully\n",
-            ),
-            (
-                f"fg:{selected_theme.caution}",
-                f"{ui_icon('caution')} Confirmation required\n",
-            ),
-            (
-                f"fg:{selected_theme.danger}",
-                f"{ui_icon('failure')} High-risk operation\n",
-            ),
-            (
-                f"fg:{selected_theme.muted}",
-                "\nUp/Down preview  ·  Enter apply  ·  Esc cancel",
-            ),
+            (f"fg:{theme.identity} bold", "Live preview\n"),
+            (f"fg:{theme.accent}", f"{MICRO_MARK} ShellPa › explain this project\n"),
+            (f"fg:{theme.success}", f"{MICRO_MARK} Completed successfully\n"),
+            (f"fg:{theme.caution}", f"{MICRO_MARK} Confirmation required\n"),
+            (f"fg:{theme.danger}", f"{MICRO_MARK} High-risk operation\n"),
         ]
     )
-    return FormattedText(content)
 
 
 def select_theme_interactively(
@@ -263,91 +290,61 @@ def select_theme_interactively(
     output_stream=None,
 ) -> str | None:
     """Open a small live-preview selector without changing the main REPL layout."""
-    selected_index = [
-        THEME_ORDER.index(current_theme) if current_theme in THEME_ORDER else 0
-    ]
-    bindings = KeyBindings()
-    control = FormattedTextControl(
-        text=lambda: _theme_selector_content(selected_index),
-        focusable=True,
+    selected = current_theme if current_theme in THEME_ORDER else THEME_ORDER[0]
+    result = select_interactively(
+        "Select a ShellPa theme",
+        tuple(SelectionOption(name, THEMES[name].label) for name in THEME_ORDER),
+        selected,
+        UXSettings(theme=selected),
+        persisted_value=selected,
+        preview=_theme_preview,
+        allow_back=True,
+        input_stream=input_stream,
+        output_stream=output_stream,
     )
-
-    @bindings.add("up")
-    def _previous(event) -> None:
-        selected_index[0] = (selected_index[0] - 1) % len(THEME_ORDER)
-        event.app.invalidate()
-
-    @bindings.add("down")
-    def _next(event) -> None:
-        selected_index[0] = (selected_index[0] + 1) % len(THEME_ORDER)
-        event.app.invalidate()
-
-    @bindings.add("enter")
-    def _apply(event) -> None:
-        event.app.exit(result=THEME_ORDER[selected_index[0]])
-
-    @bindings.add("escape")
-    @bindings.add("c-c")
-    def _cancel(event) -> None:
-        event.app.exit(result=None)
-
-    application: Application[str | None] = Application(
-        layout=Layout(Window(content=control, always_hide_cursor=True)),
-        key_bindings=bindings,
-        full_screen=False,
-        erase_when_done=True,
-        input=input_stream,
-        output=output_stream,
-    )
-    return application.run()
+    return result.value if result.action is SelectorAction.SELECT else None
 
 
 def _mode_selector_content(
     selected_index: list[int],
     state: InteractiveState,
 ) -> FormattedText:
-    theme = active_theme(state.settings)
-    selected_mode = MODE_ORDER[selected_index[0]]
+    options = tuple(
+        SelectionOption(
+            mode,
+            MODE_PRESENTATIONS[mode].label,
+            MODE_PRESENTATIONS[mode].description,
+        )
+        for mode in MODE_ORDER
+    )
+    return selector_content(
+        "Select permission mode",
+        options,
+        selected_index[0],
+        state.mode,
+        state.settings,
+        persisted_value=state.mode,
+        preview=_mode_preview,
+    )
+
+
+def _mode_preview(mode: PermissionMode, settings: UXSettings) -> FormattedText:
+    theme = active_theme(settings)
+    selected_mode = mode
     selected = MODE_PRESENTATIONS[selected_mode]
     selected_color = getattr(theme, selected.color_role)
-    content: list[tuple[str, str]] = [
-        (f"fg:{selected_color} bold", "Select permission mode\n\n")
-    ]
-    for index, mode in enumerate(MODE_ORDER):
-        presentation = MODE_PRESENTATIONS[mode]
-        marker = (
-            ("❯" if unicode_icons_supported() else ">")
-            if index == selected_index[0]
-            else " "
-        )
-        color = getattr(theme, presentation.color_role)
-        style = (
-            f"fg:{selected_color} bold reverse"
-            if index == selected_index[0]
-            else f"fg:{color}"
-        )
-        content.append((style, f"  {marker} {mode_icon(mode)} {presentation.label}\n"))
     selected_icon = mode_icon(
         selected_mode,
-        animated=(
-            state.settings.animation == "full" and not state.settings.reduced_motion
-        ),
+        animated=(settings.animation == "full" and not settings.reduced_motion),
     )
-    content.extend(
+    return FormattedText(
         [
-            ("", "\n"),
             (
                 f"fg:{selected_color} bold",
                 f"{selected_icon} {selected.label} mode\n",
             ),
-            ("", f"{selected.description}\n"),
-            (
-                f"fg:{theme.muted}",
-                "\nUp/Down preview  ·  Enter apply  ·  Esc cancel",
-            ),
         ]
     )
-    return FormattedText(content)
 
 
 def select_mode_interactively(
@@ -356,46 +353,29 @@ def select_mode_interactively(
     input_stream=None,
     output_stream=None,
 ) -> PermissionMode | None:
-    selected_index = [MODE_ORDER.index(state.mode)]
-    bindings = KeyBindings()
-    control = FormattedTextControl(
-        text=lambda: _mode_selector_content(selected_index, state),
-        focusable=True,
-    )
-
-    @bindings.add("up")
-    def _previous(event) -> None:
-        selected_index[0] = (selected_index[0] - 1) % len(MODE_ORDER)
-        event.app.invalidate()
-
-    @bindings.add("down")
-    def _next(event) -> None:
-        selected_index[0] = (selected_index[0] + 1) % len(MODE_ORDER)
-        event.app.invalidate()
-
-    @bindings.add("enter")
-    def _apply(event) -> None:
-        event.app.exit(result=MODE_ORDER[selected_index[0]])
-
-    @bindings.add("escape")
-    @bindings.add("c-c")
-    def _cancel(event) -> None:
-        event.app.exit(result=None)
-
-    application: Application[PermissionMode | None] = Application(
-        layout=Layout(Window(content=control, always_hide_cursor=True)),
-        key_bindings=bindings,
-        full_screen=False,
-        erase_when_done=True,
+    result = select_interactively(
+        "Select permission mode",
+        tuple(
+            SelectionOption(
+                mode,
+                MODE_PRESENTATIONS[mode].label,
+                MODE_PRESENTATIONS[mode].description,
+            )
+            for mode in MODE_ORDER
+        ),
+        state.mode,
+        state.settings,
+        persisted_value=state.mode,
+        preview=_mode_preview,
         refresh_interval=(
             0.3
             if state.settings.animation == "full" and not state.settings.reduced_motion
             else None
         ),
-        input=input_stream,
-        output=output_stream,
+        input_stream=input_stream,
+        output_stream=output_stream,
     )
-    return application.run()
+    return result.value if result.action is SelectorAction.SELECT else None
 
 
 def _select_mode(state: InteractiveState) -> PermissionMode | None:
@@ -406,54 +386,54 @@ def _motion_selector_content(
     selected_index: list[int],
     state: InteractiveState,
 ) -> FormattedText:
-    theme = active_theme(state.settings)
-    selected = MOTION_ORDER[selected_index[0]]
+    return selector_content(
+        "Select motion",
+        tuple(
+            SelectionOption(name, _motion_label(name), _motion_description(name))
+            for name in MOTION_ORDER
+        ),
+        selected_index[0],
+        state.settings.animation,
+        state.settings,
+        persisted_value=state.settings.animation,
+        preview=_motion_preview,
+    )
+
+
+def _motion_label(name: str) -> str:
     labels = {
         "full": "Full",
         "compact": "Compact",
         "off": "Off",
     }
+    return labels[name]
+
+
+def _motion_description(name: str) -> str:
     descriptions = {
         "full": "Short motion for startup, waiting, activity, and selection.",
         "compact": "Static ShellPa identity with no continuous movement.",
         "off": "No decorative startup presentation or animated state.",
     }
+    return descriptions[name]
+
+
+def _motion_preview(selected: str, settings: UXSettings) -> FormattedText:
+    theme = active_theme(settings)
     full_frames = IDLE_FRAMES if unicode_icons_supported() else ASCII_IDLE_FRAMES
     previews = {
         "full": full_frames[int(time.monotonic() * 4) % len(full_frames)],
         "compact": ui_icon("assistant"),
         "off": "-",
     }
-    content: list[tuple[str, str]] = [
-        (f"fg:{theme.identity} bold", "Select motion\n\n")
-    ]
-    for index, name in enumerate(MOTION_ORDER):
-        marker = (
-            ("❯" if unicode_icons_supported() else ">")
-            if index == selected_index[0]
-            else " "
-        )
-        style = (
-            f"fg:{theme.identity} bold reverse"
-            if index == selected_index[0]
-            else f"fg:{theme.muted}"
-        )
-        content.append((style, f"  {marker} {previews[name]} {labels[name]}\n"))
-    content.extend(
+    return FormattedText(
         [
-            ("", "\n"),
             (
                 f"fg:{theme.accent} bold",
-                f"{previews[selected]} ShellPa · {labels[selected]} preview\n",
-            ),
-            ("", f"{descriptions[selected]}\n"),
-            (
-                f"fg:{theme.muted}",
-                "\nUp/Down preview  ·  Enter apply  ·  Esc cancel",
+                f"{previews[selected]} ShellPa · {_motion_label(selected)} preview\n",
             ),
         ]
     )
-    return FormattedText(content)
 
 
 def select_motion_interactively(
@@ -465,42 +445,21 @@ def select_motion_interactively(
     current = (
         state.settings.animation if state.settings.animation in MOTION_ORDER else "full"
     )
-    selected_index = [MOTION_ORDER.index(current)]
-    bindings = KeyBindings()
-    control = FormattedTextControl(
-        text=lambda: _motion_selector_content(selected_index, state),
-        focusable=True,
-    )
-
-    @bindings.add("up")
-    def _previous(event) -> None:
-        selected_index[0] = (selected_index[0] - 1) % len(MOTION_ORDER)
-        event.app.invalidate()
-
-    @bindings.add("down")
-    def _next(event) -> None:
-        selected_index[0] = (selected_index[0] + 1) % len(MOTION_ORDER)
-        event.app.invalidate()
-
-    @bindings.add("enter")
-    def _apply(event) -> None:
-        event.app.exit(result=MOTION_ORDER[selected_index[0]])
-
-    @bindings.add("escape")
-    @bindings.add("c-c")
-    def _cancel(event) -> None:
-        event.app.exit(result=None)
-
-    application: Application[str | None] = Application(
-        layout=Layout(Window(content=control, always_hide_cursor=True)),
-        key_bindings=bindings,
-        full_screen=False,
-        erase_when_done=True,
+    result = select_interactively(
+        "Select motion",
+        tuple(
+            SelectionOption(name, _motion_label(name), _motion_description(name))
+            for name in MOTION_ORDER
+        ),
+        current,
+        state.settings,
+        persisted_value=current,
+        preview=_motion_preview,
         refresh_interval=0.25,
-        input=input_stream,
-        output=output_stream,
+        input_stream=input_stream,
+        output_stream=output_stream,
     )
-    return application.run()
+    return result.value if result.action is SelectorAction.SELECT else None
 
 
 def _select_motion(state: InteractiveState) -> str | None:
@@ -558,8 +517,11 @@ def handle_slash_command(
                 "[dim]Run /config to save provider settings permanently.[/dim]"
             )
     elif command == "/config":
-        if run_setup_wizard():
+        outcome = run_setup_wizard()
+        if outcome is SetupOutcome.SAVED:
             state.model_name = os.environ.get("SHELLPA_MODEL")
+        elif outcome is SetupOutcome.CANCELLED:
+            console.print("[dim]Returned to ShellPa without saving.[/dim]")
     elif command == "/login":
         if argument and argument.lower() != "device-code":
             console.print("[yellow]Use: /login or /login device-code[/yellow]")
@@ -596,7 +558,8 @@ def handle_slash_command(
             )
         else:
             console.print(
-                "[yellow]Use: /theme ocean, aurora, minimal, contrast, or ansi[/yellow]"
+                "[yellow]Use: /theme shellpa, ocean, aurora, minimal, "
+                "contrast, or ansi[/yellow]"
             )
     elif command in {"/motion", "/animation"}:
         if not argument:
@@ -633,6 +596,52 @@ def handle_slash_command(
             state.settings,
             return_label="Return to ShellPa",
         )
+    elif command == "/update":
+        preference = argument.lower()
+        if not preference:
+            display_guided_update(console)
+        elif preference == "settings":
+            if _has_interactive_terminal():
+                result = select_interactively(
+                    "Update notifications",
+                    (
+                        SelectionOption(
+                            "weekly",
+                            "Weekly",
+                            "Contact only PyPI, at most once every seven days.",
+                        ),
+                        SelectionOption(
+                            "manual",
+                            "Manual only",
+                            "Check only when you run /update or shellpa update.",
+                        ),
+                        SelectionOption(
+                            "off",
+                            "Disabled",
+                            "Do not run automatic update checks.",
+                        ),
+                    ),
+                    state.settings.update_notifications,
+                    state.settings,
+                    persisted_value=state.settings.update_notifications,
+                )
+                if result.action is SelectorAction.SELECT and result.value is not None:
+                    state.settings.update_notifications = result.value
+                    save_ux_settings(state.settings)
+            else:
+                console.print(
+                    "Update notifications: "
+                    f"[bold]{state.settings.update_notifications}[/bold]"
+                )
+        elif preference in UPDATE_NOTIFICATION_ORDER:
+            state.settings.update_notifications = preference
+            save_ux_settings(state.settings)
+            console.print(f"Update notifications set to [bold]{preference}[/bold].")
+        else:
+            console.print(
+                "[yellow]Use: /update, /update settings, /update weekly, "
+                "/update manual, or /update off[/yellow]"
+            )
     elif command == "/clear":
         console.clear()
     elif command == "/history":

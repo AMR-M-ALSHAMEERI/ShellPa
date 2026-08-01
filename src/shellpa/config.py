@@ -11,7 +11,7 @@ from .credentials import (
     has_session_credential,
     set_session_credential,
 )
-from .setup import get_env_path, run_setup_wizard
+from .setup import SetupOutcome, get_env_path, run_setup_wizard
 
 console = Console()
 
@@ -145,8 +145,8 @@ def load_config() -> ConfigStatus:
     status = inspect_config()
     if not status.is_configured:
         console.print("[yellow]Initial configuration required...[/yellow]")
-        success = run_setup_wizard()
-        if not success:
+        outcome = run_setup_wizard()
+        if outcome is not SetupOutcome.SAVED:
             console.print(
                 "[bold red]Error: You must configure ShellPa before using it.[/bold red]"
             )

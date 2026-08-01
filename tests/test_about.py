@@ -27,6 +27,20 @@ def test_about_selector_can_choose_repository_with_keyboard() -> None:
     assert selected is about.AboutAction.REPOSITORY
 
 
+def test_about_selector_identifies_public_github_repository() -> None:
+    rendered = "".join(
+        text
+        for _, text in about._about_selector_content(
+            [2],
+            UXSettings(),
+            "Return to ShellPa",
+        )
+    )
+
+    assert "ShellPa — GitHub repository" in rendered
+    assert "private repository" not in rendered
+
+
 def test_about_selector_escape_cancels_without_selecting_launch() -> None:
     with create_pipe_input() as pipe_input:
         pipe_input.send_text("\x1b")

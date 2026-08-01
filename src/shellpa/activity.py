@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from enum import Enum
@@ -15,7 +14,8 @@ from prompt_toolkit.layout.controls import FormattedTextControl
 from rich.console import Console
 from rich.status import Status
 
-from .icons import ui_icon, unicode_icons_supported
+from .icons import unicode_icons_supported
+from .identity import MICRO_MARK
 from .ux import UXSettings, active_theme, save_ux_settings
 
 
@@ -45,7 +45,7 @@ def activity_status(
     """Show motion only while real work represented by the state is happening."""
     theme = active_theme(settings)
     label = ACTIVITY_LABELS[state]
-    text = f"[bold {theme.accent}]{ui_icon('assistant')} ShellPa · {label}[/]"
+    text = f"[bold {theme.accent}]{MICRO_MARK} ShellPa · {label}[/]"
     if (
         console.is_terminal
         and settings.animation == "full"
@@ -73,10 +73,7 @@ class ExecutionActivity:
             return
         self._started = True
         theme = active_theme(self.settings)
-        label = (
-            f"[bold {theme.accent}]{ui_icon('assistant')} ShellPa · "
-            "Executing command…[/]"
-        )
+        label = f"[bold {theme.accent}]{MICRO_MARK} ShellPa · Executing command…[/]"
         if (
             self.console.is_terminal
             and self.settings.animation == "full"
@@ -101,24 +98,14 @@ class ExecutionActivity:
             self._status = None
 
 
-APPROVAL_FRAMES = ("?", "¿", "?", "·")
-ASCII_APPROVAL_FRAMES = ("?", ".", "?", ".")
-
-
 def _approval_content(
     selected: list[int],
     settings: UXSettings,
 ) -> FormattedText:
     theme = active_theme(settings)
-    frames = APPROVAL_FRAMES if unicode_icons_supported() else ASCII_APPROVAL_FRAMES
-    frame = (
-        frames[int(time.monotonic() * 3) % len(frames)]
-        if settings.animation == "full" and not settings.reduced_motion
-        else "?"
-    )
     choices = ("Yes, execute", "No, cancel")
     content: list[tuple[str, str]] = [
-        (f"fg:{theme.identity} bold", f"{frame} ShellPa"),
+        (f"fg:{theme.identity} bold", f"{MICRO_MARK} ShellPa"),
         (f"fg:{theme.accent}", " · Execute this command?\n\n"),
     ]
     for index, choice in enumerate(choices):
@@ -219,7 +206,7 @@ def _onboarding_content(page: list[int], settings: UXSettings) -> FormattedText:
         [
             (
                 f"fg:{theme.identity} bold",
-                f"{ui_icon('assistant')} Welcome to ShellPa\n\n",
+                f"{MICRO_MARK} Welcome to ShellPa\n\n",
             ),
             (f"fg:{theme.accent} bold", f"{title}\n"),
             ("", f"{body}\n\n"),

@@ -175,6 +175,7 @@ that may influence a provider request.
 | `shellpa context` | Inspect workspace facts and provider-safe context |
 | `shellpa doctor` | Diagnose the local installation without exposing secrets |
 | `shellpa about` | Open the ShellPa identity and project hub |
+| `shellpa update` | Check the stable PyPI release and show the appropriate upgrade command |
 | `shellpa version` | Show the installed version |
 
 See the complete

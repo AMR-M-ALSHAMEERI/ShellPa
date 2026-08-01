@@ -72,7 +72,6 @@ REQUIRED_MODULES = (
     "pydantic",
     "dotenv",
     "keyring",
-    "pyfiglet",
     "questionary",
     "prompt_toolkit",
 )
