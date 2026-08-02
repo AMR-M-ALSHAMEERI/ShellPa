@@ -52,5 +52,6 @@ session, and logout requires explicit confirmation.
 
 ## Distribution status
 
-Version 0.3 is a private repository checkpoint. It is not a public GitHub
-release and is not published to PyPI.
+The ShellPa 0.3 release line is available from the public GitHub repository and
+PyPI. New installations should use the latest stable release; these notes remain
+for users migrating from 0.2.

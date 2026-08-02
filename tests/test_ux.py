@@ -29,16 +29,18 @@ def test_ux_settings_normalize_and_save_without_secrets(tmp_path: Path) -> None:
 
     payload = json.loads(saved_path.read_text(encoding="utf-8"))
     assert payload == {
-        "theme": "ocean",
+        "theme": "shellpa",
         "animation": "full",
         "reduced_motion": True,
         "onboarding_complete": False,
+        "update_notifications": "manual",
     }
     assert set(payload) == {
         "theme",
         "animation",
         "reduced_motion",
         "onboarding_complete",
+        "update_notifications",
     }
 
 
@@ -49,10 +51,28 @@ def test_no_color_selects_ansi_theme(monkeypatch) -> None:
 
 def test_all_themes_build_prompt_and_confirmation_styles() -> None:
     assert "aurora" in ux.THEMES
+    assert ux.THEMES["shellpa"].label == "ShellPa Signature"
     for theme_name in ux.THEMES:
         settings = ux.UXSettings(theme=theme_name)
         assert ux.prompt_style(settings)
         assert ux.questionary_style(settings)
+
+
+def test_temporary_midnight_theme_name_migrates_to_shellpa_signature() -> None:
+    assert ux.UXSettings(theme="midnight").normalized().theme == "shellpa"
+
+
+def test_brand_header_places_version_with_wordmark_and_falls_back_to_ascii(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(ux, "unicode_icons_supported", lambda: False)
+
+    rendered = ux.brand_logo_text(ux.UXSettings(), width=90).plain
+
+    lines = rendered.splitlines()
+    assert f"v{ux.__version__}" not in lines[0]
+    assert lines[-1].endswith(f"S H E L L P A  v{ux.__version__}")
+    assert rendered.isascii()
 
 
 def test_animation_off_prints_nothing() -> None:

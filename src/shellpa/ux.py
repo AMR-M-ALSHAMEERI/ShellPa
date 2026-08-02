@@ -13,7 +13,6 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
-import pyfiglet
 import questionary
 from prompt_toolkit.styles import Style
 from rich.console import Console
@@ -23,7 +22,8 @@ from rich.table import Table
 from rich.text import Text
 
 from . import __version__
-from .icons import model_icon, shell_icon, ui_icon
+from .icons import model_icon, shell_icon, unicode_icons_supported
+from .identity import MICRO_MARK, LogoTone, reveal_logo, terminal_logo
 from .models import CommandProposal, ExecutionResult, RiskAssessment, RiskLevel
 
 
@@ -49,6 +49,16 @@ THEMES: dict[str, ThemeSpec] = {
         "#ffd166",
         "#ff5c77",
         "#7895b2",
+    ),
+    "shellpa": ThemeSpec(
+        "shellpa",
+        "ShellPa Signature",
+        "#5b8fd8",
+        "#d2ad58",
+        "#71b7a0",
+        "#d2ad58",
+        "#d06f79",
+        "#8795aa",
     ),
     "minimal": ThemeSpec(
         "minimal",
@@ -95,21 +105,29 @@ THEMES: dict[str, ThemeSpec] = {
 
 @dataclass
 class UXSettings:
-    theme: str = "ocean"
+    theme: str = "shellpa"
     animation: str = "full"
     reduced_motion: bool = False
     onboarding_complete: bool = False
+    update_notifications: str = "manual"
 
     def normalized(self) -> UXSettings:
-        theme = self.theme if self.theme in THEMES else "ocean"
+        requested_theme = "shellpa" if self.theme == "midnight" else self.theme
+        theme = requested_theme if requested_theme in THEMES else "shellpa"
         animation = (
             self.animation if self.animation in {"full", "compact", "off"} else "full"
+        )
+        update_notifications = (
+            self.update_notifications
+            if self.update_notifications in {"weekly", "manual", "off"}
+            else "manual"
         )
         return UXSettings(
             theme,
             animation,
             bool(self.reduced_motion),
             bool(self.onboarding_complete),
+            update_notifications,
         )
 
 
@@ -124,10 +142,11 @@ def load_ux_settings(path: Path | None = None) -> UXSettings:
         if not isinstance(payload, dict):
             return UXSettings()
         return UXSettings(
-            theme=str(payload.get("theme", "ocean")),
+            theme=str(payload.get("theme", "shellpa")),
             animation=str(payload.get("animation", "full")),
             reduced_motion=bool(payload.get("reduced_motion", False)),
             onboarding_complete=bool(payload.get("onboarding_complete", False)),
+            update_notifications=str(payload.get("update_notifications", "manual")),
         ).normalized()
     except (OSError, ValueError, TypeError):
         return UXSettings()
@@ -249,11 +268,17 @@ def render_brand_header(
 ) -> None:
     theme = active_theme(settings)
     identity = color or theme.identity
-    banner = pyfiglet.figlet_format("SHELLPA", font="slant").rstrip()
-    console.print(Text(f"{banner}  v{__version__}", style=f"bold {identity}"))
+    console.print(
+        brand_logo_text(
+            settings,
+            width=console.width,
+            identity_override=identity,
+        )
+    )
+    console.print()
     console.print(
         Text.assemble(
-            ("  Natural language. Native commands. Your authority.\n", theme.muted),
+            ("  Natural language. Native commands. Your authority.\n\n", theme.muted),
             ("  ", theme.muted),
             (
                 f"{shell_icon(env_info.get('shell'))} "
@@ -267,6 +292,45 @@ def render_brand_header(
             ),
         )
     )
+    console.print()
+
+
+def brand_logo_text(
+    settings: UXSettings,
+    *,
+    width: int,
+    identity_override: str | None = None,
+    reveal_progress: float = 1.0,
+) -> Text:
+    """Build the shared terminal-native logo used by every launch surface."""
+    theme = active_theme(settings)
+    identity = identity_override or theme.identity
+    frame = reveal_logo(
+        terminal_logo(
+            width,
+            unicode=(
+                theme.name != "ansi"
+                and os.environ.get("SHELLPA_ICONS") != "ascii"
+                and unicode_icons_supported()
+            ),
+        ),
+        reveal_progress,
+    )
+    rendered = Text()
+    tone_styles = {
+        LogoTone.PRIMARY: f"bold {identity}",
+        LogoTone.SECONDARY: f"bold {theme.muted}",
+        LogoTone.ACCENT: f"bold {theme.accent}",
+        LogoTone.WORDMARK: f"bold {theme.accent}",
+    }
+    for index, line in enumerate(frame.styled_lines):
+        for span in line:
+            rendered.append(span.text, style=tone_styles[span.tone])
+        if index == len(frame.lines) - 1 and reveal_progress >= 1.0:
+            rendered.append(f"  v{__version__}", style=theme.muted)
+        if index != len(frame.lines) - 1:
+            rendered.append("\n")
+    return rendered
 
 
 def display_about(
@@ -276,7 +340,7 @@ def display_about(
     theme = active_theme(settings)
     details = Text()
     details.append(
-        f"{ui_icon('assistant')} ShellPa v{__version__}\n",
+        f"{MICRO_MARK} ShellPa v{__version__}\n",
         style=f"bold {theme.identity}",
     )
     details.append(
@@ -348,7 +412,7 @@ def display_session_greeting(
         statement_index=statement_index,
     )
     final = Text.assemble(
-        (f"{ui_icon('assistant')} {greeting}\n", f"bold {theme.identity}"),
+        (f"{MICRO_MARK} {greeting}\n", f"bold {theme.identity}"),
         (f"  {statement}", theme.accent),
     )
     if normalized.animation != "full" or normalized.reduced_motion:
@@ -364,7 +428,7 @@ def display_session_greeting(
             for color in colors:
                 live.update(
                     Text.assemble(
-                        (f"{ui_icon('assistant')} {greeting}\n", f"bold {color}"),
+                        (f"{MICRO_MARK} {greeting}\n", f"bold {color}"),
                         (f"  {statement}", color),
                     )
                 )
@@ -395,17 +459,25 @@ def play_startup_reveal(
         render_brand_header(console, normalized, env_info, model_name)
         return
 
-    colors = ("#003366", "#0055ff", "#0088ff", "#00bbff", "#00eeff")
     from rich.live import Live
 
+    duration = 1.0 if not normalized.onboarding_complete else 0.65
+    frame_count = 20 if not normalized.onboarding_complete else 13
     with _keypress_mode():
         with Live(console=console, refresh_per_second=30, transient=True) as live:
-            for color in colors:
-                banner = pyfiglet.figlet_format("SHELLPA", font="slant").rstrip()
-                live.update(Text(f"{banner}  v{__version__}", style=f"bold {color}"))
+            for frame_index in range(frame_count + 1):
+                progress = frame_index / frame_count
+                eased = 1.0 - ((1.0 - progress) ** 2)
+                live.update(
+                    brand_logo_text(
+                        normalized,
+                        width=console.width,
+                        reveal_progress=eased,
+                    )
+                )
                 if _skip_requested():
                     break
-                sleep(0.07)
+                sleep(duration / frame_count)
     render_brand_header(console, normalized, env_info, model_name)
 
 
@@ -468,7 +540,7 @@ def display_execution_result(
     theme = active_theme(settings)
     if result.success:
         console.print(
-            f"[bold {theme.success}]{ui_icon('success')} Completed[/bold {theme.success}] "
+            f"[bold {theme.success}]{MICRO_MARK} Completed[/bold {theme.success}] "
             f"[{theme.muted}]in {result.duration_seconds:.2f}s[/{theme.muted}]"
         )
 
@@ -491,7 +563,9 @@ def display_execution_failure(
         details.add_row("Status", "Timed out")
     elif result.cancelled:
         details.add_row("Status", "Cancelled")
-    console.print(Panel(details, title="Command failed", border_style=theme.danger))
+    console.print(
+        Panel(details, title=f"{MICRO_MARK} Failed", border_style=theme.danger)
+    )
 
 
 def display_recovery_heading(

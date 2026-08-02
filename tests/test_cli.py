@@ -21,6 +21,7 @@ def test_help_lists_public_commands() -> None:
         "about",
         "help",
         "version",
+        "update",
     ):
         assert command in result.stdout
 
@@ -38,6 +39,34 @@ def test_version_command() -> None:
 
     assert result.exit_code == 0
     assert main.__version__ in result.stdout
+
+
+def test_update_command_uses_guided_update(monkeypatch) -> None:
+    guided_update = Mock(
+        return_value=Mock(state=main.UpdateState.CURRENT),
+    )
+    monkeypatch.setattr(main, "display_guided_update", guided_update)
+
+    result = runner.invoke(main.app, ["update"])
+
+    assert result.exit_code == 0
+    guided_update.assert_called_once_with(main.console)
+
+
+def test_update_command_saves_notification_preference(monkeypatch) -> None:
+    settings = main.UXSettings()
+    save_settings = Mock()
+    guided_update = Mock()
+    monkeypatch.setattr(main, "load_ux_settings", lambda: settings)
+    monkeypatch.setattr(main, "save_ux_settings", save_settings)
+    monkeypatch.setattr(main, "display_guided_update", guided_update)
+
+    result = runner.invoke(main.app, ["update", "--notifications", "weekly"])
+
+    assert result.exit_code == 0
+    assert settings.update_notifications == "weekly"
+    save_settings.assert_called_once_with(settings)
+    guided_update.assert_not_called()
 
 
 def test_unknown_first_word_is_treated_as_natural_language(monkeypatch) -> None:
@@ -77,7 +106,7 @@ def test_run_allows_query_starting_with_reserved_word(monkeypatch) -> None:
 def test_config_runs_wizard_without_starting_shell(monkeypatch) -> None:
     wizard = Mock()
     run_shellpa = Mock()
-    wizard.return_value = True
+    wizard.return_value = main.SetupOutcome.SAVED
     monkeypatch.setattr(main, "run_setup_wizard", wizard)
     monkeypatch.setattr(main, "_run_shellpa", run_shellpa)
 

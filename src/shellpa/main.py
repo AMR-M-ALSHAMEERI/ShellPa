@@ -34,7 +34,13 @@ from .os_detect import detect_environment
 from .recovery import build_recovery_context, request_recovery_permission
 from .repl import InteractiveState, run_interactive_session
 from .safety import assess_command, decide_permission
-from .setup import run_setup_wizard
+from .setup import SetupOutcome, run_setup_wizard
+from .updater import (
+    UpdateState,
+    display_cached_update_notice,
+    display_guided_update,
+    start_weekly_update_check,
+)
 from .ux import (
     UXSettings,
     display_execution_failure,
@@ -45,6 +51,7 @@ from .ux import (
     load_ux_settings,
     play_startup_reveal,
     questionary_style,
+    save_ux_settings,
 )
 from .workspace import detect_workspace, format_provider_workspace_summary
 from .workspace_ui import display_workspace_context, display_workspace_identity
@@ -332,6 +339,7 @@ def _run_shellpa(
     config_status = load_config()
     env_info = detect_environment()
     ux_settings = load_ux_settings()
+    start_weekly_update_check(ux_settings.update_notifications)
     event_logger = SessionLogger()
     event_logger.emit(
         "session_start",
@@ -369,6 +377,7 @@ def _run_shellpa(
         display_session_greeting(console, ux_settings)
         display_workspace_identity(console, workspace_context)
         run_first_time_onboarding(console, ux_settings)
+        display_cached_update_notice(console, ux_settings.update_notifications)
         state = InteractiveState(
             mode=mode,
             model_name=config_status.model_name,
@@ -513,7 +522,11 @@ def run_command(
 @app.command("config")
 def config_command() -> None:
     """Configure the provider, model, and credential."""
-    if not run_setup_wizard(allow_session=False):
+    outcome = run_setup_wizard(allow_session=False)
+    if outcome is SetupOutcome.CANCELLED:
+        console.print("[dim]Configuration closed without saving.[/dim]")
+        return
+    if outcome is SetupOutcome.FAILED:
         raise typer.Exit(code=1)
 
 
@@ -584,6 +597,36 @@ def help_command(ctx: typer.Context) -> None:
 def version_command() -> None:
     """Show the installed ShellPa version."""
     console.print(f"ShellPa {__version__}")
+
+
+@app.command("update")
+def update_command(
+    notifications: str | None = typer.Option(
+        None,
+        "--notifications",
+        help="Set update notices: weekly, manual, or off.",
+    ),
+) -> None:
+    """Check PyPI and show the safe upgrade command for this installation."""
+    if notifications is not None:
+        preference = notifications.strip().lower()
+        if preference not in {"weekly", "manual", "off"}:
+            raise typer.BadParameter("Use weekly, manual, or off.")
+        settings = load_ux_settings()
+        settings.update_notifications = preference
+        save_ux_settings(settings)
+        console.print(
+            f"Update notifications set to [bold]{preference}[/bold]."
+            + (
+                " ShellPa will check PyPI at most once every seven days."
+                if preference == "weekly"
+                else ""
+            )
+        )
+        return
+    result = display_guided_update(console)
+    if result.state is UpdateState.FAILED:
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

@@ -39,6 +39,7 @@ def display_workspace_identity(console: Console, context: WorkspaceContext) -> N
     console.print(
         Text(f"Workspace · {format_workspace_identity(context)}", style="dim")
     )
+    console.print()
 
 
 def display_workspace_context(console: Console, context: WorkspaceContext) -> None:

@@ -1,5 +1,6 @@
 import os
 from os import terminal_size
+from unittest.mock import Mock
 
 from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
@@ -27,6 +28,26 @@ def state() -> repl.InteractiveState:
 
 def test_non_slash_input_is_not_consumed() -> None:
     assert repl.handle_slash_command("list files", state(), Console()) is False
+
+
+def test_update_slash_command_uses_guided_update(monkeypatch) -> None:
+    guided_update = Mock()
+    monkeypatch.setattr(repl, "display_guided_update", guided_update)
+    shell_state = state()
+    console = Console()
+
+    assert repl.handle_slash_command("/update", shell_state, console) is True
+    guided_update.assert_called_once_with(console)
+
+
+def test_update_slash_command_saves_notification_preference(monkeypatch) -> None:
+    save_settings = Mock()
+    monkeypatch.setattr(repl, "save_ux_settings", save_settings)
+    shell_state = state()
+
+    assert repl.handle_slash_command("/update weekly", shell_state, Console()) is True
+    assert shell_state.settings.update_notifications == "weekly"
+    save_settings.assert_called_once_with(shell_state.settings)
 
 
 def test_codex_login_and_logout_slash_commands(monkeypatch) -> None:
@@ -264,24 +285,33 @@ def test_footer_uses_bounded_workspace_identity(
 
 
 def test_theme_selector_content_changes_palette_with_selection() -> None:
-    ocean = repl._theme_selector_content([0])
-    aurora = repl._theme_selector_content([1])
+    signature = repl._theme_selector_content([0])
+    ocean = repl._theme_selector_content([1])
 
+    assert "ShellPa Signature" in "".join(text for _, text in signature)
     assert "Ocean / Aurora" in "".join(text for _, text in ocean)
-    assert "Aurora Violet" in "".join(text for _, text in aurora)
-    assert ocean[0][0] != aurora[0][0]
+    assert signature[0][0] != ocean[0][0]
+
+
+def test_theme_selector_keeps_saved_marker_when_preview_moves(monkeypatch) -> None:
+    monkeypatch.setattr(repl, "unicode_icons_supported", lambda: True)
+
+    rendered = "".join(text for _, text in repl._theme_selector_content([1], "shellpa"))
+
+    assert "● ShellPa Signature" in rendered
+    assert "› ○ Ocean / Aurora" in rendered
 
 
 def test_live_theme_selector_applies_arrow_key_selection() -> None:
     with create_pipe_input() as pipe_input:
         pipe_input.send_text("\x1b[B\r")
         selected = repl.select_theme_interactively(
-            "ocean",
+            "shellpa",
             input_stream=pipe_input,
             output_stream=DummyOutput(),
         )
 
-    assert selected == "aurora"
+    assert selected == "ocean"
 
 
 def test_idle_prompt_animates_only_while_input_is_empty(monkeypatch) -> None:
@@ -301,8 +331,14 @@ def test_idle_prompt_animates_only_while_input_is_empty(monkeypatch) -> None:
     app.current_buffer.text = "typing"
     typing_text = "".join(text for _, text in renderer())
 
-    assert idle_text.startswith("✧")
-    assert typing_text.startswith("✦")
+    assert idle_text.startswith("> ")
+    assert typing_text.startswith(">_")
+
+
+def test_prompt_color_breath_is_bounded() -> None:
+    assert repl._blend_hex_color("#000000", "#ffffff", 0.5) == "#808080"
+    assert repl._blend_hex_color("#123456", "#abcdef", -1.0) == "#123456"
+    assert repl._blend_hex_color("#123456", "#abcdef", 2.0) == "#abcdef"
 
 
 def test_interactive_session_accepts_legacy_exit_word(

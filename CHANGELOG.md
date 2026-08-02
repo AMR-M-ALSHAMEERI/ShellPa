@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0 - Unreleased
+
+- Added a shared terminal-native ShellPa identity, the `>_` activity mark, and
+  restrained prompt motion with reduced-motion and ASCII fallbacks.
+- Added ShellPa Signature as the identity default while preserving every
+  existing theme and explicit user preference.
+- Rebuilt provider, model, recovery, theme, mode, and motion choices on a
+  shared selector with separate focus and selected-state markers.
+- Made configuration transactional with exact one-step Back behavior, explicit
+  cancellation, a redacted final review, and no credential write before Save.
+- Added `shellpa update` and `/update`, stable-only PyPI checks, installation
+  detection, and opt-in non-blocking weekly notifications.
+
 All notable user-facing changes to ShellPa are recorded here.
 
 ## 0.3.1 - 2026-08-01

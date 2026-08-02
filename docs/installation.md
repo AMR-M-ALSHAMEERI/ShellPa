@@ -81,6 +81,30 @@ adding the Python user scripts directory to `PATH`.
 
 ## Update
 
+ShellPa can check the official stable PyPI release and identify how the active
+installation is managed:
+
+```bash
+shellpa update
+```
+
+The command does not update its own running environment. It displays the exact
+command to run after leaving ShellPa. This avoids locked-environment failures,
+especially with `pipx` on Windows.
+
+To opt into a background check at most once every seven days:
+
+```bash
+shellpa update --notifications weekly
+```
+
+Use `manual` to check only when requested, or `off` to disable automatic
+checks. An update check contacts only PyPI's public ShellPa metadata endpoint
+and caches only the check time and latest public version. It does not read or
+send provider credentials, prompts, workspace facts, or analytics.
+
+The underlying package-manager commands remain available directly.
+
 ```bash
 pipx upgrade shellpa
 ```

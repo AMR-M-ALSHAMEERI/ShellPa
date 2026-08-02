@@ -16,6 +16,10 @@ Run `shellpa` with no arguments to open the interactive session.
 | `shellpa context` | Show local workspace facts and the smaller provider-safe summary. |
 | `shellpa about` | Open the ShellPa identity and developer hub. |
 | `shellpa help` | Show command help. |
+| `shellpa update` | Check the official stable PyPI release and show the appropriate upgrade command. |
+| `shellpa update --notifications weekly` | Opt into a non-blocking check at most once every seven days. |
+| `shellpa update --notifications manual` | Check only when `shellpa update` or `/update` is requested. |
+| `shellpa update --notifications off` | Disable automatic update checks. |
 | `shellpa version` | Show the installed version. |
 
 The shorter form `shellpa "<request>"` is still supported. Use the explicit
@@ -46,6 +50,11 @@ controls are:
 - `/login device-code` uses a one-time device code.
 - `/logout` reviews the current Codex session and requires explicit
   confirmation before sign-out.
+- `/update` checks PyPI and shows the correct upgrade command without changing
+  the running environment.
+- `/update settings` opens the ShellPa-native update-notification selector.
+- `/update weekly`, `/update manual`, and `/update off` set the preference
+  directly.
 
 `/login` does not need to be run for every ShellPa session. Codex manages and
 refreshes its cached authentication session. If an account is already
