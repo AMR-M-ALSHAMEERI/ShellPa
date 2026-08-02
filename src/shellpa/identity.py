@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import Enum
+from itertools import groupby
 
 MICRO_MARK = ">_"
 IDLE_SIGNAL_START = 2.8
@@ -27,23 +28,81 @@ class LogoVariant(str, Enum):
 class LogoFrame:
     lines: tuple[str, ...]
     variant: LogoVariant
+    styled_lines: tuple[tuple[LogoSpan, ...], ...]
 
 
-UNICODE_LOGO = (
-    "       ╭────────╮",
-    ">──────┘  ╭──╮  │",
-    "          ╰──╯  ╰──╮",
-    "          ╭────────╯_",
-    "          S H E L L P A",
+class LogoTone(str, Enum):
+    PRIMARY = "primary"
+    SECONDARY = "secondary"
+    ACCENT = "accent"
+    WORDMARK = "wordmark"
+
+
+@dataclass(frozen=True)
+class LogoSpan:
+    text: str
+    tone: LogoTone
+
+
+P = LogoTone.PRIMARY
+S = LogoTone.SECONDARY
+A = LogoTone.ACCENT
+W = LogoTone.WORDMARK
+
+
+UNICODE_LOGO_MASK = (
+    "                          NNNNNNNNNNNNNNNNNNN",
+    "                        NNNNNNNNNNNNNNNNNNNNNNN",
+    "BBBB                   NNNN                 NNNN",
+    "BBBBBB                 NNN     BBBBBBBBBBB   NNN",
+    "   BBBBB               NNNN    BBBBBBBBBBB   NNN",
+    "     BBBBB              NNNNN  BBB          NNNN",
+    "    BBBBB                 NNNN BBB   BNNNNNNNNN",
+    "  BBBBB                    NNN BBB BBBNNNNNNNN",
+    "BBBBB   BBBBBBBBBBBBBBBBBBBBNN BBB BBB",
+    "BBB     BBBBBBBBBBBBBBBBBBBB   BBB BBB",
+    "                               BBBBBBB GGGGGGGGGGG",
+    "                                BBBBB   GGGGGGGGGG",
 )
 
-ASCII_LOGO = (
-    "       +--------+",
-    ">------/  +--+  |",
-    "          +--+  +--+",
-    "          +--------/_",
-    "          S H E L L P A",
+
+def _mask_to_spans(row: str) -> tuple[LogoSpan, ...]:
+    tones = {"B": P, "N": S, "G": A, " ": P}
+    return tuple(
+        LogoSpan(
+            " " * len(cells) if key == " " else "█" * len(cells),
+            tones[key],
+        )
+        for key, grouped in groupby(row)
+        if (cells := tuple(grouped))
+    )
+
+
+UNICODE_LOGO_SPANS = tuple(_mask_to_spans(row) for row in UNICODE_LOGO_MASK) + (
+    (LogoSpan("", P),),
+    (LogoSpan("                S H E L L P A", W),),
 )
+
+
+ASCII_LOGO_SPANS = (
+    (LogoSpan("       +--------+", S),),
+    (LogoSpan(">------/  +--+  ", P), LogoSpan("|", S)),
+    (LogoSpan("          +--+  ", P), LogoSpan("+--+", S)),
+    (LogoSpan("          +--------/", P), LogoSpan("_", A)),
+    (LogoSpan("", P),),
+    (LogoSpan("          S H E L L P A", W),),
+)
+
+
+def _logo_frame(
+    styled_lines: tuple[tuple[LogoSpan, ...], ...],
+    variant: LogoVariant,
+) -> LogoFrame:
+    return LogoFrame(
+        tuple("".join(span.text for span in line) for line in styled_lines),
+        variant,
+        styled_lines,
+    )
 
 
 def logo_variant(width: int) -> LogoVariant:
@@ -58,10 +117,57 @@ def terminal_logo(width: int, *, unicode: bool = True) -> LogoFrame:
     """Return a width-aware logo with a reliable ASCII fallback."""
     variant = logo_variant(width)
     if variant is LogoVariant.NARROW:
-        return LogoFrame((MICRO_MARK,), variant)
+        return _logo_frame(((LogoSpan(">", P), LogoSpan("_", A)),), variant)
     if variant is LogoVariant.COMPACT:
-        return LogoFrame((MICRO_MARK, "S H E L L P A"), variant)
-    return LogoFrame(UNICODE_LOGO if unicode else ASCII_LOGO, variant)
+        return _logo_frame(
+            (
+                (LogoSpan(">", P), LogoSpan("_", A)),
+                (LogoSpan("S H E L L P A", W),),
+            ),
+            variant,
+        )
+    return _logo_frame(
+        UNICODE_LOGO_SPANS if unicode else ASCII_LOGO_SPANS,
+        variant,
+    )
+
+
+def reveal_logo(frame: LogoFrame, progress: float) -> LogoFrame:
+    """Reveal a logo from left to right while keeping its layout stable."""
+    bounded = min(max(progress, 0.0), 1.0)
+    if bounded >= 1.0 or frame.variant is not LogoVariant.FULL:
+        return frame
+
+    art_lines = frame.styled_lines[:-1]
+    width = max((len("".join(span.text for span in line)) for line in art_lines), default=0)
+    art_progress = min(bounded / 0.82, 1.0)
+    wordmark_progress = max((bounded - 0.82) / 0.18, 0.0)
+    art_cutoff = math.ceil(width * art_progress)
+
+    revealed: list[tuple[LogoSpan, ...]] = []
+    for line in art_lines:
+        column = 0
+        visible_line: list[LogoSpan] = []
+        for span in line:
+            visible = max(min(art_cutoff - column, len(span.text)), 0)
+            text = span.text[:visible] + (" " * (len(span.text) - visible))
+            visible_line.append(LogoSpan(text, span.tone))
+            column += len(span.text)
+        revealed.append(tuple(visible_line))
+
+    wordmark = frame.styled_lines[-1]
+    wordmark_width = sum(len(span.text) for span in wordmark)
+    wordmark_cutoff = math.ceil(wordmark_width * wordmark_progress)
+    revealed_wordmark: list[LogoSpan] = []
+    column = 0
+    for span in wordmark:
+        visible = max(min(wordmark_cutoff - column, len(span.text)), 0)
+        text = span.text[:visible] + (" " * (len(span.text) - visible))
+        revealed_wordmark.append(LogoSpan(text, span.tone))
+        column += len(span.text)
+    revealed.append(tuple(revealed_wordmark))
+
+    return _logo_frame(tuple(revealed), frame.variant)
 
 
 def prompt_mark_frame(

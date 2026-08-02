@@ -23,7 +23,7 @@ from rich.text import Text
 
 from . import __version__
 from .icons import model_icon, shell_icon, unicode_icons_supported
-from .identity import MICRO_MARK, terminal_logo
+from .identity import MICRO_MARK, LogoTone, reveal_logo, terminal_logo
 from .models import CommandProposal, ExecutionResult, RiskAssessment, RiskLevel
 
 
@@ -278,7 +278,7 @@ def render_brand_header(
     console.print()
     console.print(
         Text.assemble(
-            ("  Natural language. Native commands. Your authority.\n", theme.muted),
+            ("  Natural language. Native commands. Your authority.\n\n", theme.muted),
             ("  ", theme.muted),
             (
                 f"{shell_icon(env_info.get('shell'))} "
@@ -300,30 +300,33 @@ def brand_logo_text(
     *,
     width: int,
     identity_override: str | None = None,
+    reveal_progress: float = 1.0,
 ) -> Text:
     """Build the shared terminal-native logo used by every launch surface."""
     theme = active_theme(settings)
     identity = identity_override or theme.identity
-    frame = terminal_logo(
-        width,
-        unicode=(
-            theme.name != "ansi"
-            and os.environ.get("SHELLPA_ICONS") != "ascii"
-            and unicode_icons_supported()
+    frame = reveal_logo(
+        terminal_logo(
+            width,
+            unicode=(
+                theme.name != "ansi"
+                and os.environ.get("SHELLPA_ICONS") != "ascii"
+                and unicode_icons_supported()
+            ),
         ),
+        reveal_progress,
     )
     rendered = Text()
-    for index, line in enumerate(frame.lines):
-        is_name = "S H E L L P A" in line
-        if line.endswith("_"):
-            rendered.append(line[:-1], style=f"bold {identity}")
-            rendered.append("_", style=f"bold {theme.accent}")
-        else:
-            rendered.append(
-                line,
-                style=f"bold {theme.accent if is_name else identity}",
-            )
-        if index == len(frame.lines) - 1:
+    tone_styles = {
+        LogoTone.PRIMARY: f"bold {identity}",
+        LogoTone.SECONDARY: f"bold {theme.muted}",
+        LogoTone.ACCENT: f"bold {theme.accent}",
+        LogoTone.WORDMARK: f"bold {theme.accent}",
+    }
+    for index, line in enumerate(frame.styled_lines):
+        for span in line:
+            rendered.append(span.text, style=tone_styles[span.tone])
+        if index == len(frame.lines) - 1 and reveal_progress >= 1.0:
             rendered.append(f"  v{__version__}", style=theme.muted)
         if index != len(frame.lines) - 1:
             rendered.append("\n")
@@ -456,23 +459,25 @@ def play_startup_reveal(
         render_brand_header(console, normalized, env_info, model_name)
         return
 
-    theme = active_theme(normalized)
-    colors = (theme.muted, theme.identity, theme.accent, theme.identity)
     from rich.live import Live
 
+    duration = 1.0 if not normalized.onboarding_complete else 0.65
+    frame_count = 20 if not normalized.onboarding_complete else 13
     with _keypress_mode():
         with Live(console=console, refresh_per_second=30, transient=True) as live:
-            for color in colors:
+            for frame_index in range(frame_count + 1):
+                progress = frame_index / frame_count
+                eased = 1.0 - ((1.0 - progress) ** 2)
                 live.update(
                     brand_logo_text(
                         normalized,
                         width=console.width,
-                        identity_override=color,
+                        reveal_progress=eased,
                     )
                 )
                 if _skip_requested():
                     break
-                sleep(0.07)
+                sleep(duration / frame_count)
     render_brand_header(console, normalized, env_info, model_name)
 
 

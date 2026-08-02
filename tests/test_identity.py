@@ -1,9 +1,11 @@
 from shellpa.identity import (
     MICRO_MARK,
+    LogoTone,
     LogoVariant,
     input_caret_frame,
     prompt_breath_level,
     prompt_mark_frame,
+    reveal_logo,
     signal_sweep_active,
     terminal_logo,
 )
@@ -14,7 +16,41 @@ def test_terminal_logo_uses_width_aware_variants() -> None:
     assert terminal_logo(40).variant is LogoVariant.COMPACT
     full = terminal_logo(90)
     assert full.variant is LogoVariant.FULL
+    assert full.lines[-2] == ""
     assert full.lines[-1].strip() == "S H E L L P A"
+
+
+def test_full_logo_preserves_png_identity_layers() -> None:
+    frame = terminal_logo(90)
+    tones = {span.tone for line in frame.styled_lines for span in line}
+
+    assert tones == {
+        LogoTone.PRIMARY,
+        LogoTone.SECONDARY,
+        LogoTone.ACCENT,
+        LogoTone.WORDMARK,
+    }
+    assert any(
+        "███████" in span.text
+        for line in frame.styled_lines
+        for span in line
+        if span.tone is LogoTone.ACCENT
+    )
+    assert "═" not in "\n".join(frame.lines)
+    assert "╗" not in "\n".join(frame.lines)
+
+
+def test_logo_draw_reveal_keeps_layout_and_finishes_with_complete_mark() -> None:
+    frame = terminal_logo(90)
+    empty = reveal_logo(frame, 0.0)
+    partial = reveal_logo(frame, 0.5)
+    complete = reveal_logo(frame, 1.0)
+
+    assert tuple(map(len, empty.lines)) == tuple(map(len, frame.lines))
+    assert not "".join(empty.lines).strip()
+    assert "".join(partial.lines).strip()
+    assert "S H E L L P A" not in "\n".join(partial.lines)
+    assert complete == frame
 
 
 def test_terminal_logo_has_ascii_fallback() -> None:

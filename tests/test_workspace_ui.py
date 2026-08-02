@@ -13,6 +13,7 @@ from shellpa.models import (
 )
 from shellpa.workspace_ui import (
     display_workspace_context,
+    display_workspace_identity,
     format_workspace_identity,
 )
 
@@ -45,6 +46,17 @@ def test_workspace_identity_is_compact_and_filename_free(tmp_path: Path) -> None
 
     assert identity == "Docker + Python · Git main* (3) · venv"
     assert str(tmp_path) not in identity
+
+
+def test_workspace_identity_leaves_space_before_interactive_controls(
+    tmp_path: Path,
+) -> None:
+    output = StringIO()
+    console = Console(file=output, width=120, color_system=None)
+
+    display_workspace_identity(console, workspace_context(tmp_path))
+
+    assert output.getvalue().endswith("\n\n")
 
 
 def test_workspace_display_separates_local_paths_from_provider_summary() -> None:
