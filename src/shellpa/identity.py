@@ -139,7 +139,9 @@ def reveal_logo(frame: LogoFrame, progress: float) -> LogoFrame:
         return frame
 
     art_lines = frame.styled_lines[:-1]
-    width = max((len("".join(span.text for span in line)) for line in art_lines), default=0)
+    width = max(
+        (len("".join(span.text for span in line)) for line in art_lines), default=0
+    )
     art_progress = min(bounded / 0.82, 1.0)
     wordmark_progress = max((bounded - 0.82) / 0.18, 0.0)
     art_cutoff = math.ceil(width * art_progress)
